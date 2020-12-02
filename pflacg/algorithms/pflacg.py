@@ -37,10 +37,127 @@ class ParameterFreeLaCG(_AbstractAlgorithm):
 
 class FractionalAwayStepFW(_AbstractAlgorithm):
     def __init__(self, ratio=0.5, **kwargs):
+        self.ratio = 0.5
         pass
 
-    def run(self, **kwargs):
-        pass
+    #Use AFW algorithm to halve the strong Wolfe gap until it is below a given tolerance.
+    def run(
+        self,
+        objective_function,
+        feasible_region,
+        target_accuracy,
+        initial_point=None,
+        active_set=None,
+        lambdas=None,
+    ):
+
+        if (
+            initial_point is None
+            or active_set is None
+            or initial_barycentric_coordinates is None
+        ):
+            x = feasible_region.initial_point.copy()
+            active_set = [x]
+            lambdas = [1.0]
+        else:
+            x = initial_point.copy()
+            active_set = deepcopy(active_set)
+            lambdas = deepcopy(initial_barycentric_coordinates)
+
+        start_time = time.time()
+        grad = objective_function.evaluate_grad(x)
+
+        iteration = 0
+        duration = 0.0
+        f_val = objective_function.evaluate(x)
+        dual_gap = np.dot(grad, x - feasible_region.lp_oracle(grad))
+        run_status = (iteration, duration, f_val, dual_gap)
+        LOGGER.info(
+            "Running " + str(self.fw_variant) + "({5}): "
+            "iteration = {1:.{0}f}, duration = {2:.{0}f}, f_val = {3:.{0}f}, dual_gap = {4:.{0}f}".format(
+                DISPLAY_DECIMALS, *run_status, self.fw_variant
+            )
+        )
+
+        run_history = [run_status]
+        
+        v = feasible_region.lp_oracle(grad)
+        a, indexMax = feasible_region.away_oracle(grad, active_set)
+        strong_FW_gap = np.dot(grad, a - v)
+        
+        while (strong_FW_gap > target_accuracy):
+            #Halve the gap
+            x, strong_FW_gap = self.away_step_fw_halving(
+                objective_function,
+                feasible_region,
+                x,
+                active_set,
+                lambdas,
+                strong_FW_gap/2.0
+            )
+
+            iteration += 1
+            duration = time.time() - start_time
+            f_val = objective_function.evaluate(x)
+            run_status = (
+                iteration,
+                duration,
+                f_val,
+                strong_FW_gap,
+            )
+            LOGGER.info(
+                "Running " + str(self.fw_variant) + ": "
+                "iteration = {1}, duration = {2:.{0}f}, f_val = {3:.{0}f}, dual_gap = {4:.{0}f}".format(
+                    DISPLAY_DECIMALS, *run_status
+                )
+            )
+            run_history.append(run_status)
+        return run_history
+
+
+    @staticmethod
+    def away_step_fw_halving(objective_function, feasible_region, x, active_set, lambdas, target_gap):
+        while True:
+            grad = objective_function.evaluate_grad(x)
+            v = feasible_region.lp_oracle(grad)
+            a, indexMax = feasible_region.away_oracle(grad, active_set)
+            if(grad.dot(a - v) < target_gap):
+                return x , grad.dot(a - v)
+            # Choose FW direction, can overwrite index.
+            FWGap = np.dot(grad, x - v)
+            if FWGap == 0.0:
+                return x, vertvar, FWGap
+            if FWGap > np.dot(grad, a - x):
+                d = v - x
+                alphaMax = 1.0
+                optStep = step_size(
+                    objective_function, x, d, grad, alphaMax, {"step_size_param" : "line_search"}
+                )
+                if alpha != alphaMax:
+                    flag, index = new_vertex_fail_fast(v, active_set)
+                    lambdas[:] = [i * (1 - alpha) for i in lambdas]
+                    if flag:
+                        active_set.append(v)
+                        lambdas.append(alpha)
+                    else:
+                        # Update existing weights
+                        lambdas[index] += alpha
+                # Max step length away step, only one vertex now.
+                else:
+                    active_set[:] = [v]
+                    lambdas[:] = [alphaMax]
+            else:
+                d = x - a
+                alphaMax = lambdas[indexMax] / (1.0 - lambdas[indexMax])
+                optStep = step_size(
+                    objective_function, x, d, grad, alphaMax, {"step_size_param" : "line_search"}
+                )
+                lambdas[:] = [i * (1 + alpha) for i in lambdas]
+                # Max step, need to delete a vertex.
+                if alpha != alphaMax:
+                    lambdas[indexMax] -= alpha
+                else:
+                    delete_vertex_index(indexMax, active_set, lambdas)
 
 
 class wACC(_AbstractAlgorithm):

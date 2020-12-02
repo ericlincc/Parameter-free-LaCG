@@ -83,6 +83,47 @@ class ExitCriterion:
             raise ValueError("Invalid criterion_type: {0}".format(self.criterion_type))
 
 
+# Pick a stepsize.
+def step_size(function, x, d, grad, alpha_max, step_size_param):
+    if step_size_param["type_step"] == "line_search":
+        alpha = function.line_search(x, d)
+    if step_size_param["type_step"] == "adaptive_short_step":
+        alpha, L_estimate = backtracking_step_size(
+            function,
+            d,
+            x,
+            grad,
+            step_size_param["L_estimate"],
+            alpha_max,
+            tau=step_size_param["tau"],
+            eta=step_size_param["eta"],
+        )
+        step_size_param["L_estimate"] = L_estimate
+    return min(alpha, alpha_max)
+
+
+def backtracking_step_size(function, d, x, grad, L, alpha_max, tau, eta):
+    M = L * eta
+    d_norm_squared = np.dot(d, d)
+    g_t = np.dot(-grad, d)
+    alpha = min(g_t / (M * d_norm_squared), alpha_max)
+    while (
+        function.f(x + alpha * d)
+        > function.f(x) - alpha * g_t + 0.5 * M * d_norm_squared * alpha * alpha
+    ):
+        M *= tau
+        alpha = min(g_t / (M * d_norm_squared), alpha_max)
+    return alpha, M
+
+
+# Provides an initial estimate for the smoothness parameter.
+def smoothnessEstimate(x0, function):
+    L = 1.0e-3
+    while function.f(x0 - function.grad(x0) / L) > function.f(x0):
+        L *= 1.5
+    return L
+
+
 def new_vertex_fail_fast(vertex, active_set):
     """ Find if x is in the active set."""
     for i in range(len(active_set)):

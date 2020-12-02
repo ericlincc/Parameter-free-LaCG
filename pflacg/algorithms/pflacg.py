@@ -8,6 +8,8 @@ import numpy as np
 
 from pflacg.algorithms._abstract_algorithm import _AbstractAlgorithm
 
+from pflacg.algorithms._algorithm_utils import step_size
+
 
 logging.basicConfig(
     level=logging.INFO,
@@ -27,7 +29,7 @@ class ParameterFreeLaCG(_AbstractAlgorithm):
         feasible_region,
         exit_criterion,
         initial_point=None,
-        initial_active_set=None
+        initial_active_set=None,
         async=False,
     ):
         pass
@@ -49,40 +51,63 @@ class wACC(_AbstractAlgorithm):
         pass
 
 
-class AdaptiveFW(_AbstractAlgorithm):
+class FrankWolfe(_AbstractAlgorithm):
     """
+    Implementation of Frank-Wolfe/Conditional Gradients algorithms with line search
+
     Implementation of Adaptive Frank-Wolfe/Conditional Gradients algorithms
     AdaAFW, AdaPFW and AdaFW from Pedregosa et al.
-    
-    Pedregosa, Fabian, et al. "Linearly convergent Frank-Wolfe with backtracking line-search." 
+
+    Pedregosa, Fabian, et al. "Linearly convergent Frank-Wolfe with backtracking line-search."
     International Conference on Artificial Intelligence and Statistics. PMLR, 2020.
-    
-    The tau parameter controils the rate at which we increase the smoothness estimate, when the smoothness estimate is found to be too small.
-    The eta parameter controls the (potential) shrinking of the estimate that happens when we start an iteration (in the hopes of locally adapting to the local smoothness.)
-    
+
+    The tau parameter controils the rate at which we increase the smoothness estimate,
+    when the smoothness estimate is found to be too small.
+    The eta parameter controls the (potential) shrinking of the estimate that happens
+    when we start an iteration (in the hopes of locally adapting to the local smoothness.)
+
+
     """
 
+    # TODO: Add comment above referencing the papers for ALL algorithms.
 
-    def __init__(self, fw_variant, L_estimate, tau, eta):
-        assert tau > 1.0 and eta <= 1.0, "Input parameters for the adaptive algorithms are incorrect."
-        assert fw_variant == "AdaAFW" or fw_variant == "AdaPFW" or fw_variant == "AdaFW", "Wrong variant supplied to the adaptive algorithm"
-        self.fw_variant = fw_variant
-        self.step_size_parameters = {"L_estimate": L_estimate, "tau": tau, "eta": eta}
+    def __init__(
+        self, fw_variant, step_type, tau=2.0, eta=0.9, smoothness_estimate=1.0e-4
+    ):
+        """
+        Parameters
+        ----------
+        fw_variant: str
+            Variant for the algorithm to run:
+                -"FW": Vanilla Frank-Wolfe
+                -"AFW": Away-step Frank-Wolfe
+                -"PFW": Pairwise-step Frank-Wolfe
+                -"DIPFW": Decomposition-invariant FW
+        step_type: str
+            Variant for the algorithm to run:
+                -"line_search": Exact linesearch.
+                -"adaptive_short_step": Short step that minimizes smoothness.
+        """
+        assert (
+            fw_variant == "AFW"
+            or fw_variant == "PFW"
+            or fw_variant == "FW"
+            or fw_variant == "DIPFW"
+        ), "Wrong variant supplied to the adaptive algorithm"
+        assert (
+            step_type == "line_search" or step_type == "adaptive_short_step"
+        ), "Wrong step size strategy supplied to the algorithm"
+        if fw_variant == "DIPFW":
+            assert (
+                step_type == "line_search"
+            ), "DIPFW is only parameter-free with line search"
+        self.step_size_param = {
+            "type_step": step_type,
+            "L_estimate": smoothness_estimate,
+            "tau": tau,
+            "eta": eta,
+        }
         return
-
-    def backtracking_step_size(function, d, x, grad, alpha_max):
-        M = self.step_size_parameters["L_estimate"] * self.step_size_parameters["eta"]
-        d_norm_squared = np.dot(d, d)
-        g_t = np.dot(-grad, d)
-        alpha = min(g_t / (M * d_norm_squared), alpha_max)
-        while (
-            function.f(x + alpha * d)
-            > function.f(x) - alpha * g_t + 0.5 * M * d_norm_squared * alpha * alpha
-        ):
-            M *= self.step_size_parameters["tau"]
-            alpha = min(g_t / (M * d_norm_squared), alpha_max)
-        self.step_size_parameters["L_estimate"] = M
-        return alpha
 
     @staticmethod
     def step_fw(objective_function, feasible_region, x):
@@ -91,13 +116,13 @@ class AdaptiveFW(_AbstractAlgorithm):
         # Choose FW direction, can overwrite index.
         d = v - x
         alphaMax = 1.0
-        optStep = backtracking_step_size(objective_function, d, x, grad, alphaMax)
+        optStep = step_size(
+            objective_function, x, d, grad, alphaMax, self.step_size_param
+        )
         return x + alpha * d, np.dot(grad, x - v)
 
     @staticmethod
-    def away_step_fw(
-        objective_function, feasible_region, x, active_set, lambdas
-    ):
+    def away_step_fw(objective_function, feasible_region, x, active_set, lambdas):
         assert np.all(np.asarray(lambdas) > 0.0), "Invalid lambda values in AFW."
         grad = objective_function.evaluate_grad(x)
         v = feasible_region.lp_oracle(grad)
@@ -105,11 +130,13 @@ class AdaptiveFW(_AbstractAlgorithm):
         # Choose FW direction, can overwrite index.
         FWGap = np.dot(grad, x - v)
         if FWGap == 0.0:
-            return x, FWGap
+            return x, vertvar, FWGap
         if FWGap > np.dot(grad, a - x):
             d = v - x
             alphaMax = 1.0
-            optStep = backtracking_step_size(objective_function, d, x, grad, alphaMax)
+            optStep = step_size(
+                objective_function, x, d, grad, alphaMax, self.step_size_param
+            )
             if alpha != alphaMax:
                 flag, index = new_vertex_fail_fast(v, active_set)
                 lambdas[:] = [i * (1 - alpha) for i in lambdas]
@@ -126,7 +153,9 @@ class AdaptiveFW(_AbstractAlgorithm):
         else:
             d = x - a
             alphaMax = lambdas[indexMax] / (1.0 - lambdas[indexMax])
-            optStep = backtracking_step_size(objective_function, d, x, grad, alphaMax)
+            optStep = step_size(
+                objective_function, x, d, grad, alphaMax, self.step_size_param
+            )
             lambdas[:] = [i * (1 + alpha) for i in lambdas]
             # Max step, need to delete a vertex.
             if alpha != alphaMax:
@@ -136,9 +165,7 @@ class AdaptiveFW(_AbstractAlgorithm):
         return x + alpha * d, FWGap
 
     @staticmethod
-    def pairwise_step_fw(
-        objective_function, feasible_region, x, active_set, lambdas
-    ):
+    def pairwise_step_fw(objective_function, feasible_region, x, active_set, lambdas):
         grad = objective_function.evaluate_grad(x)
         v = feasible_region.lp_oracle(grad)
         a, index = feasible_region.away_oracle(grad, active_set)
@@ -146,7 +173,9 @@ class AdaptiveFW(_AbstractAlgorithm):
         alphaMax = lambdas[index]
         # Update weight of away vertex.
         d = v - a
-        optStep = backtracking_step_size(objective_function, d, x, grad, alphaMax)
+        optStep = step_size(
+            objective_function, x, d, grad, alphaMax, self.step_size_param
+        )
         lambdas[index] -= alpha
         if alpha == alphaMax:
             delete_vertex_index(index, active_set, lambdas)
@@ -159,6 +188,23 @@ class AdaptiveFW(_AbstractAlgorithm):
             lambdas[index] += alpha
         return x + alpha * d, np.dot(grad, x - v)
 
+    @staticmethod
+    def DIPFW(objective_function, feasible_region, x):
+        grad = objective_function.evaluate_grad(x)
+        v = feasible_region.lp_oracle(grad)
+        grad_aux = grad.copy()
+        for i in range(len(grad_aux)):
+            if x[i] == 0.0:
+                grad_aux[i] = -1.0e15
+        a = feasible_region.lp_oracle(-grad_aux)
+        d = v - a
+        alphaMax = calculate_stepsize(x, d)
+        assert step_type == "EL", "DIPFW only accepts exact linesearch."
+        optStep = step_size(
+            objective_function, x, d, grad, alphaMax, self.step_size_param
+        )
+        return x + alpha * d, np.dot(grad, x - v)
+
     def run(
         self,
         objective_function,
@@ -166,17 +212,23 @@ class AdaptiveFW(_AbstractAlgorithm):
         exit_criterion,
         initial_point=None,
         active_set=None,
-        initial_barycentric_coordinates=None,
+        lambdas=None,
     ):
-        # Setting initial point
-        if initial_point is None or active_set is None or initial_barycentric_coordinates is None:
+
+        if (
+            initial_point is None
+            or active_set is None
+            or initial_barycentric_coordinates is None
+        ):
             x = feasible_region.initial_point.copy()
-            active_set = [x]
-            lambdas = [1.0]
+            if self.fw_variant != "AdaFW":
+                active_set = [x]
+                lambdas = [1.0]
         else:
             x = initial_point.copy()
-            active_set = deepcopy(active_set)
-            lambdas = deepcopy(initial_barycentric_coordinates)
+            if self.fw_variant != "AdaFW":
+                active_set = deepcopy(active_set)
+                lambdas = deepcopy(initial_barycentric_coordinates)
 
         start_time = time.time()
         grad = objective_function.evaluate_grad(x)
@@ -196,7 +248,7 @@ class AdaptiveFW(_AbstractAlgorithm):
         run_history = [run_status]
 
         while not exit_criterion.has_met_exit_criterion(run_status):
-            if self.fw_variant == "AdaAFW":
+            if self.fw_variant == "AFW":
                 x, dual_gap = self.away_step_fw(
                     objective_function,
                     feasible_region,
@@ -204,7 +256,7 @@ class AdaptiveFW(_AbstractAlgorithm):
                     active_set,
                     lambdas,
                 )
-            if self.fw_variant == "AdaPFW":
+            if self.fw_variant == "PFW":
                 x, dual_gap = self.pairwise_step_fw(
                     objective_function,
                     feasible_region,
@@ -212,12 +264,16 @@ class AdaptiveFW(_AbstractAlgorithm):
                     active_set,
                     lambdas,
                 )
-            if self.fw_variant == "AdaFW":
+            if self.fw_variant == "FW":
                 x, dual_gap = self.step_fw(
                     objective_function,
                     feasible_region,
                     x,
+                    active_set,
+                    lambdas,
                 )
+            if self.fw_variant == "DIPFW":
+                x, dual_gap = self.DIPFW(objective_function, feasible_region, x)
 
             iteration += 1
             duration = time.time() - start_time

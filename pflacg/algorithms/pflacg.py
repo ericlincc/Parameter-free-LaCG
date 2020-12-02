@@ -269,8 +269,6 @@ class FrankWolfe(_AbstractAlgorithm):
                     objective_function,
                     feasible_region,
                     x,
-                    active_set,
-                    lambdas,
                 )
             if self.fw_variant == "DIPFW":
                 x, dual_gap = self.DIPFW(objective_function, feasible_region, x)

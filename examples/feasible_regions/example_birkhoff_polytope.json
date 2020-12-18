@@ -1,0 +1,7 @@
+{
+    "name" : "Sample Birkhoff Polytope",
+    "class_name" : "BirkhoffPolytope",
+    "args" : {
+        "dim" : 100
+    }
+}

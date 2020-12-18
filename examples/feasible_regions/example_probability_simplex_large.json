@@ -1,0 +1,7 @@
+{
+    "name" : "Sample Probalility Simplex",
+    "class_name" : "ProbabilitySimplexPolytope",
+    "args" : {
+        "dim" : 1000
+    }
+}

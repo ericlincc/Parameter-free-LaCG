@@ -1,0 +1,9 @@
+[
+    {
+        "name" : "AFW",
+        "class_name" : "FrankWolfe",
+        "args" : { "fw_variant" : "AFW",
+				   "step_type" : "EL"
+        }
+    }
+]

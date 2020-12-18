@@ -1,0 +1,7 @@
+{
+    "name" : "Sample L1 Unit Ball",
+    "class_name" : "L1UnitBallPolytope",
+    "args" : {
+        "dim" : 100
+    }
+}

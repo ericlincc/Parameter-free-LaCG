@@ -1,0 +1,8 @@
+[
+    {
+        "name" : "Example_CGS",
+        "class_name" : "ConditionalGradientSliding",
+        "args" : {
+        }
+    }
+]

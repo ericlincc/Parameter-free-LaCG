@@ -1,0 +1,9 @@
+[
+    {
+        "name" : "VanillaFW",
+        "class_name" : "FrankWolfe",
+        "args" : { "fw_variant" : "Vanilla",
+				   "step_type" : "EL"
+        }
+    }
+]

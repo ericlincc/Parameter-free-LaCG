@@ -1,0 +1,7 @@
+{
+    "name" : "Sample Quadratic",
+    "class_name" : "Quadratic",
+    "args" : {
+        "dim" : 10
+    }
+}

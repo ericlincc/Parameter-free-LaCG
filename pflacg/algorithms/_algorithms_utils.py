@@ -203,11 +203,6 @@ def project_onto_active_set(
         f(u) = quadratic_coefficient*u^Tu + linear_vector^Tu + constant 
     over the vertices in active set until the stopping criterion is satisfied.
 
-    References
-    ----------
-    Nesterov, Y. (2018). Lectures on convex optimization (Vol. 137). 
-    Berlin, Germany: Springer. (Constant scheme II, Page 93)
-
     Parameters
     ----------
     quadratic_coefficient : float.

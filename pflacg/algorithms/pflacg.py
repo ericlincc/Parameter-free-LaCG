@@ -8,7 +8,7 @@ import numpy as np
 
 from pflacg.algorithms._abstract_algorithm import _AbstractAlgorithm
 
-from pflacg.algorithms._algorithm_utils import step_size
+from pflacg.algorithms._algorithms_utils import step_size, DISPLAY_DECIMALS, new_vertex_fail_fast, delete_vertex_index, calculate_stepsize
 
 
 logging.basicConfig(
@@ -30,7 +30,7 @@ class ParameterFreeLaCG(_AbstractAlgorithm):
         exit_criterion,
         initial_point=None,
         initial_active_set=None,
-        async=False,
+        # async=False,
     ):
         pass
 
@@ -54,7 +54,7 @@ class FractionalAwayStepFW(_AbstractAlgorithm):
         if (
             initial_point is None
             or active_set is None
-            or initial_barycentric_coordinates is None
+            or lambdas is None
         ):
             x = feasible_region.initial_point.copy()
             active_set = [x]
@@ -62,7 +62,7 @@ class FractionalAwayStepFW(_AbstractAlgorithm):
         else:
             x = initial_point.copy()
             active_set = deepcopy(active_set)
-            lambdas = deepcopy(initial_barycentric_coordinates)
+            lambdas = deepcopy(lambdas)
 
         start_time = time.time()
         grad = objective_function.evaluate_grad(x)
@@ -126,11 +126,11 @@ class FractionalAwayStepFW(_AbstractAlgorithm):
             # Choose FW direction, can overwrite index.
             FWGap = np.dot(grad, x - v)
             if FWGap == 0.0:
-                return x, vertvar, FWGap
+                return x, FWGap
             if FWGap > np.dot(grad, a - x):
                 d = v - x
                 alphaMax = 1.0
-                optStep = step_size(
+                alpha = step_size(
                     objective_function, x, d, grad, alphaMax, {"step_size_param" : "line_search"}
                 )
                 if alpha != alphaMax:
@@ -227,19 +227,19 @@ class FrankWolfe(_AbstractAlgorithm):
         return
 
     @staticmethod
-    def step_fw(objective_function, feasible_region, x):
+    def step_fw(self, objective_function, feasible_region, x):
         grad = objective_function.evaluate_grad(x)
         v = feasible_region.lp_oracle(grad)
         # Choose FW direction, can overwrite index.
         d = v - x
         alphaMax = 1.0
-        optStep = step_size(
+        alpha = step_size(
             objective_function, x, d, grad, alphaMax, self.step_size_param
         )
         return x + alpha * d, np.dot(grad, x - v)
 
     @staticmethod
-    def away_step_fw(objective_function, feasible_region, x, active_set, lambdas):
+    def away_step_fw(self, objective_function, feasible_region, x, active_set, lambdas):
         assert np.all(np.asarray(lambdas) > 0.0), "Invalid lambda values in AFW."
         grad = objective_function.evaluate_grad(x)
         v = feasible_region.lp_oracle(grad)
@@ -247,11 +247,11 @@ class FrankWolfe(_AbstractAlgorithm):
         # Choose FW direction, can overwrite index.
         FWGap = np.dot(grad, x - v)
         if FWGap == 0.0:
-            return x, vertvar, FWGap
+            return x, FWGap
         if FWGap > np.dot(grad, a - x):
             d = v - x
             alphaMax = 1.0
-            optStep = step_size(
+            alpha = step_size(
                 objective_function, x, d, grad, alphaMax, self.step_size_param
             )
             if alpha != alphaMax:
@@ -270,7 +270,7 @@ class FrankWolfe(_AbstractAlgorithm):
         else:
             d = x - a
             alphaMax = lambdas[indexMax] / (1.0 - lambdas[indexMax])
-            optStep = step_size(
+            alpha = step_size(
                 objective_function, x, d, grad, alphaMax, self.step_size_param
             )
             lambdas[:] = [i * (1 + alpha) for i in lambdas]
@@ -282,7 +282,7 @@ class FrankWolfe(_AbstractAlgorithm):
         return x + alpha * d, FWGap
 
     @staticmethod
-    def pairwise_step_fw(objective_function, feasible_region, x, active_set, lambdas):
+    def pairwise_step_fw(self, objective_function, feasible_region, x, active_set, lambdas):
         grad = objective_function.evaluate_grad(x)
         v = feasible_region.lp_oracle(grad)
         a, index = feasible_region.away_oracle(grad, active_set)
@@ -290,7 +290,7 @@ class FrankWolfe(_AbstractAlgorithm):
         alphaMax = lambdas[index]
         # Update weight of away vertex.
         d = v - a
-        optStep = step_size(
+        alpha = step_size(
             objective_function, x, d, grad, alphaMax, self.step_size_param
         )
         lambdas[index] -= alpha
@@ -306,7 +306,7 @@ class FrankWolfe(_AbstractAlgorithm):
         return x + alpha * d, np.dot(grad, x - v)
 
     @staticmethod
-    def DIPFW(objective_function, feasible_region, x):
+    def DIPFW(self, objective_function, feasible_region, x):
         grad = objective_function.evaluate_grad(x)
         v = feasible_region.lp_oracle(grad)
         grad_aux = grad.copy()
@@ -316,8 +316,8 @@ class FrankWolfe(_AbstractAlgorithm):
         a = feasible_region.lp_oracle(-grad_aux)
         d = v - a
         alphaMax = calculate_stepsize(x, d)
-        assert step_type == "EL", "DIPFW only accepts exact linesearch."
-        optStep = step_size(
+        assert self.step_type["type_step"] == "line_search", "DIPFW only accepts exact linesearch."
+        alpha = step_size(
             objective_function, x, d, grad, alphaMax, self.step_size_param
         )
         return x + alpha * d, np.dot(grad, x - v)
@@ -335,7 +335,7 @@ class FrankWolfe(_AbstractAlgorithm):
         if (
             initial_point is None
             or active_set is None
-            or initial_barycentric_coordinates is None
+            or lambdas is None
         ):
             x = feasible_region.initial_point.copy()
             if self.fw_variant != "AdaFW":
@@ -345,7 +345,7 @@ class FrankWolfe(_AbstractAlgorithm):
             x = initial_point.copy()
             if self.fw_variant != "AdaFW":
                 active_set = deepcopy(active_set)
-                lambdas = deepcopy(initial_barycentric_coordinates)
+                lambdas = deepcopy(lambdas)
 
         start_time = time.time()
         grad = objective_function.evaluate_grad(x)

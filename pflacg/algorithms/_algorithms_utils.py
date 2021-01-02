@@ -242,6 +242,7 @@ def project_onto_active_set(
     linear = matrix.dot(linear_vector)
 
     # Create objective function and feasible region.
+    from pflacg.experiments.feasible_regions import ProbabilitySimplexPolytope
     feas_reg = ProbabilitySimplexPolytope(len(active_set))
     projection_objective_fun = projection_objective_function(quadratic, linear, constant)
     x, polished_barycentric_coordinates, gap_values1 = accelerated_projected_gradient_descent(
@@ -417,34 +418,3 @@ class projection_objective_function:
 
     def smallest_eigenvalue(self):
         return self.Mu
-
-class ProbabilitySimplexPolytope:
-    def __init__(self, dim):
-        self.dim = dim
-
-    @property
-    def initial_point(self):
-        v = np.zeros(self.dim)
-        v[0] = 1.0
-        return v
-
-    @property
-    def initial_active_set(self):
-        return [self.initial_point]
-
-    def lp_oracle(self, x):
-        v = np.zeros(len(x), dtype=float)
-        v[np.argmin(x)] = 1.0
-        return v
-
-    def projection(self, x):
-        (n,) = x.shape  # will raise ValueError if v is not 1-D
-        if x.sum() == 1.0 and np.alltrue(x >= 0):
-            return x
-        v = x - np.max(x)
-        u = np.sort(v)[::-1]
-        cssv = np.cumsum(u)
-        rho = np.count_nonzero(u * np.arange(1, n + 1) > (cssv - 1.0)) - 1
-        theta = float(cssv[rho] - 1.0) / (rho + 1)
-        w = (v - theta).clip(min=0)
-        return w

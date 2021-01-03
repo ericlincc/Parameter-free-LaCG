@@ -16,14 +16,14 @@ logging.basicConfig(
 LOGGER = logging.getLogger()
 
 
-DISPLAY_DECIMALS = 4
+DISPLAY_DECIMALS = 10
 
 
 class ExitCriterion:
     """Stores parameters to determine the exit criterion."""
 
     def __init__(
-        self, criterion_type, criterion_value, criterion_reference=0.0, max_time=1800
+        self, criterion_type, criterion_value, criterion_reference=0.0, max_time=1800, max_iter=1000
     ):
         """
         Parameters
@@ -54,6 +54,7 @@ class ExitCriterion:
         self.criterion_value = criterion_value
         self.criterion_reference = criterion_reference
         self.max_time = max_time
+        self.max_iter = max_iter
 
     def has_met_exit_criterion(self, run_status):
         """
@@ -69,6 +70,8 @@ class ExitCriterion:
 
         if duration > self.max_time:
             return True
+        if iteration > self.max_iter:
+            return True
 
         if self.criterion_type == "PG":
             #            print("Value: "  + str(self.criterion_reference))
@@ -83,11 +86,13 @@ class ExitCriterion:
         else:
             raise ValueError("Invalid criterion_type: {0}".format(self.criterion_type))
 
-
+def line_search(self, grad, d, x):
+    return -np.dot(grad, d) / np.dot(d, self.M.dot(d))
+    
 # Pick a stepsize.
 def step_size(function, x, d, grad, alpha_max, step_size_param):
     if step_size_param["type_step"] == "line_search":
-        alpha = function.line_search(x, d)
+        alpha = function.line_search(grad, d, x)
     if step_size_param["type_step"] == "adaptive_short_step":
         alpha, L_estimate = backtracking_step_size(
             function,
@@ -109,8 +114,8 @@ def backtracking_step_size(function, d, x, grad, L, alpha_max, tau, eta):
     g_t = np.dot(-grad, d)
     alpha = min(g_t / (M * d_norm_squared), alpha_max)
     while (
-        function.f(x + alpha * d)
-        > function.f(x) - alpha * g_t + 0.5 * M * d_norm_squared * alpha * alpha
+        function.evaluate(x + alpha * d)
+        > function.evaluate(x) - alpha * g_t + 0.5 * M * d_norm_squared * alpha * alpha
     ):
         M *= tau
         alpha = min(g_t / (M * d_norm_squared), alpha_max)
@@ -137,13 +142,13 @@ def new_vertex_fail_fast(vertex, active_set):
     return True, np.nan
 
 
-def step_size(function, d, grad, x, type_step="EL", maxStep=None):
-    """ Stepsize selection for the algorithm."""
-    if type_step == "SS":
-        return -np.dot(grad, d) / (function.largest_eigenvalue * np.dot(d, d))
-    else:
-        # Exact Linesearch.
-        return function.line_search(grad, d, x)
+# def step_size(function, d, grad, x, type_step="EL", maxStep=None):
+#     """ Stepsize selection for the algorithm."""
+#     if type_step == "SS":
+#         return -np.dot(grad, d) / (function.largest_eigenvalue * np.dot(d, d))
+#     else:
+#         # Exact Linesearch.
+#         return function.line_search(grad, d, x)
 
 
 def delete_vertex_index(index, active_set, lambdas):

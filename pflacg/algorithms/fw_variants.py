@@ -111,12 +111,18 @@ class FrankWolfe(_AbstractAlgorithm):
         iteration = 0
         duration = 0.0
         f_val = objective_function.evaluate(x)
-        dual_gap = np.dot(grad, x - feasible_region.lp_oracle(grad))
-        run_status = (iteration, duration, f_val, dual_gap)
+        v = feasible_region.lp_oracle(grad)
+        if(self.fw_variant == "FW" or self.fw_variant == "DIPFW"):
+            strong_wolfe_gap = 0.0
+        else:
+            a, indexMax = feasible_region.away_oracle(grad, active_set)
+            strong_wolfe_gap = grad.dot(a - v)
+        dual_gap = grad.dot(x - v)
+        run_status = (iteration, duration, f_val, dual_gap, strong_wolfe_gap)
         if(save_and_output_results):
             LOGGER.info(
                 "Running " + str(self.fw_variant) + "({5}): "
-                "iteration = {1:.{0}f}, duration = {2:.{0}f}, f_val = {3:.{0}f}, dual_gap = {4:.{0}f}".format(
+                "iteration = {1:.{0}f}, duration = {2:.{0}f}, f_val = {3:.{0}f}, dual_gap = {4:.{0}f}, strong_wolfe_gap = {5:.{0}f}".format(
                     DISPLAY_DECIMALS, *run_status, self.fw_variant
                 )
             )
@@ -124,7 +130,7 @@ class FrankWolfe(_AbstractAlgorithm):
 
         while not exit_criterion.has_met_exit_criterion(run_status):
             if self.fw_variant == "AFW":
-                x, dual_gap = away_step_fw(
+                x, dual_gap, strong_wolfe_gap = away_step_fw(
                     objective_function,
                     feasible_region,
                     x,
@@ -133,7 +139,7 @@ class FrankWolfe(_AbstractAlgorithm):
                     self.step_size_param,
                 )
             if self.fw_variant == "PFW":
-                x, dual_gap = pairwise_step_fw(
+                x, dual_gap, strong_wolfe_gap = pairwise_step_fw(
                     objective_function,
                     feasible_region,
                     x,
@@ -142,14 +148,14 @@ class FrankWolfe(_AbstractAlgorithm):
                     self.step_size_param,
                 )
             if self.fw_variant == "FW":
-                x, dual_gap = step_fw(
+                x, dual_gap, strong_wolfe_gap = step_fw(
                     objective_function,
                     feasible_region,
                     x,
                     self.step_size_param,
                 )
             if self.fw_variant == "DIPFW":
-                x, dual_gap = DIPFW(objective_function, feasible_region, x, self.step_size_param)
+                x, dual_gap, strong_wolfe_gap = DIPFW(objective_function, feasible_region, x, self.step_size_param)
 
             iteration += 1
             duration = time.time() - start_time
@@ -159,11 +165,12 @@ class FrankWolfe(_AbstractAlgorithm):
                 duration,
                 f_val,
                 dual_gap,
+                strong_wolfe_gap,
             )
             if(save_and_output_results):
                 LOGGER.info(
                     "Running " + str(self.fw_variant) + ": "
-                    "iteration = {1}, duration = {2:.{0}f}, f_val = {3:.{0}f}, dual_gap = {4:.{0}f}".format(
+                    "iteration = {1}, duration = {2:.{0}f}, f_val = {3:.{0}f}, dual_gap = {4:.{0}f}, strong_wolfe_gap = {5:.{0}f}".format(
                         DISPLAY_DECIMALS, *run_status
                     )
                 )
@@ -181,7 +188,7 @@ def step_fw(objective_function, feasible_region, x, step_size_param):
     alpha = step_size(
         objective_function, x, d, grad, alphaMax, step_size_param
     )
-    return x + alpha * d, grad.dot(x - v)
+    return x + alpha * d, grad.dot(x - v), 0.0
 
 def away_step_fw(objective_function, feasible_region, x, active_set, lambdas, step_size_param):
     assert np.all(np.asarray(lambdas) > 0.0), "Invalid lambda values in AFW."
@@ -223,7 +230,7 @@ def away_step_fw(objective_function, feasible_region, x, active_set, lambdas, st
             lambdas[indexMax] -= alpha
         else:
             delete_vertex_index(indexMax, active_set, lambdas)
-    return x + alpha * d, FWGap
+    return x + alpha * d, FWGap, grad.dot(a - v)
 
 def pairwise_step_fw( objective_function, feasible_region, x, active_set, lambdas, step_size_param):
     grad = objective_function.evaluate_grad(x)
@@ -246,7 +253,7 @@ def pairwise_step_fw( objective_function, feasible_region, x, active_set, lambda
         lambdas.append(alpha)
     else:
         lambdas[index] += alpha
-    return x + alpha * d, grad.dot(x - v)
+    return x + alpha * d, grad.dot(x - v), grad.dot(a - v)
 
 def DIPFW(objective_function, feasible_region, x, step_size_param):
     grad = objective_function.evaluate_grad(x)
@@ -262,4 +269,4 @@ def DIPFW(objective_function, feasible_region, x, step_size_param):
     alpha = step_size(
         objective_function, x, d, grad, alphaMax, step_size_param
     )
-    return x + alpha * d, grad.dot(x - v)
+    return x + alpha * d, grad.dot(x - v), 0.0

@@ -37,7 +37,7 @@ class ExitCriterion:
             For "PG" only.
         """
 
-        valid_criterion_type = ["PG", "DG", "IT"]
+        valid_criterion_type = ["PG", "DG", "IT", "SWG"]
         criterion_value_threshold = 0.0
 
         # Safety check
@@ -66,7 +66,7 @@ class ExitCriterion:
             Values representating algorithm status and progress.
         """
 
-        iteration, duration, f_val, dual_gap = run_status
+        iteration, duration, f_val, dual_gap, strong_wolfe_gap = run_status
 
         if duration > self.max_time:
             return True
@@ -81,6 +81,8 @@ class ExitCriterion:
         elif self.criterion_type == "DG":
             #            LOGGER.info("Wolfe gap: {0}".format(dual_gap))
             return dual_gap < self.criterion_value
+        elif self.criterion_type == "SWG":
+            return strong_wolfe_gap < self.criterion_value
         elif self.criterion_type == "IT":
             return iteration >= self.criterion_value
         else:

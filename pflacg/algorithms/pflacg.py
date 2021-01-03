@@ -58,7 +58,7 @@ class FractionalAwayStepFW(_AbstractAlgorithm):
         from pflacg.algorithms.fw_variants import FrankWolfe
         fw_algorithm = FrankWolfe(self.fw_variant, "line_search")
         from pflacg.algorithms._algorithms_utils import ExitCriterion
-        exit_criterion = ExitCriterion("DG", target_accuracy)
+        exit_criterion = ExitCriterion("SWG", target_accuracy)
         results = fw_algorithm.run(objective_function, feasible_region, exit_criterion, initial_point, active_set,lambdas, save_and_output_results = False)
         return results
 

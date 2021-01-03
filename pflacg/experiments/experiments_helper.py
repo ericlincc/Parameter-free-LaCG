@@ -21,7 +21,6 @@ def fake_callback(model, where, value):
 
 def max_vertex(grad, active_vertex):
     """Iterate over current active set and return vertex with greatest inner product."""
-
     max_prod = np.dot(active_vertex[0], grad)
     max_ind = 0
     for i in range(len(active_vertex)):

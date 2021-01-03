@@ -87,6 +87,7 @@ class FrankWolfe(_AbstractAlgorithm):
         initial_point=None,
         active_set=None,
         lambdas=None,
+        save_and_output_results=True,
     ):
 
         if (
@@ -103,7 +104,7 @@ class FrankWolfe(_AbstractAlgorithm):
             if self.fw_variant != "FW":
                 active_set = deepcopy(active_set)
                 lambdas = deepcopy(lambdas)
-
+        
         start_time = time.time()
         grad = objective_function.evaluate_grad(x)
 
@@ -112,14 +113,14 @@ class FrankWolfe(_AbstractAlgorithm):
         f_val = objective_function.evaluate(x)
         dual_gap = np.dot(grad, x - feasible_region.lp_oracle(grad))
         run_status = (iteration, duration, f_val, dual_gap)
-        LOGGER.info(
-            "Running " + str(self.fw_variant) + "({5}): "
-            "iteration = {1:.{0}f}, duration = {2:.{0}f}, f_val = {3:.{0}f}, dual_gap = {4:.{0}f}".format(
-                DISPLAY_DECIMALS, *run_status, self.fw_variant
+        if(save_and_output_results):
+            LOGGER.info(
+                "Running " + str(self.fw_variant) + "({5}): "
+                "iteration = {1:.{0}f}, duration = {2:.{0}f}, f_val = {3:.{0}f}, dual_gap = {4:.{0}f}".format(
+                    DISPLAY_DECIMALS, *run_status, self.fw_variant
+                )
             )
-        )
-
-        run_history = [run_status]
+            run_history = [run_status]
 
         while not exit_criterion.has_met_exit_criterion(run_status):
             if self.fw_variant == "AFW":
@@ -159,14 +160,18 @@ class FrankWolfe(_AbstractAlgorithm):
                 f_val,
                 dual_gap,
             )
-            LOGGER.info(
-                "Running " + str(self.fw_variant) + ": "
-                "iteration = {1}, duration = {2:.{0}f}, f_val = {3:.{0}f}, dual_gap = {4:.{0}f}".format(
-                    DISPLAY_DECIMALS, *run_status
+            if(save_and_output_results):
+                LOGGER.info(
+                    "Running " + str(self.fw_variant) + ": "
+                    "iteration = {1}, duration = {2:.{0}f}, f_val = {3:.{0}f}, dual_gap = {4:.{0}f}".format(
+                        DISPLAY_DECIMALS, *run_status
+                    )
                 )
-            )
-            run_history.append(run_status)
-        return run_history
+                run_history.append(run_status)
+        if(save_and_output_results):
+            return run_history
+        else:
+            return x, active_set, lambdas
 
 def step_fw(objective_function, feasible_region, x, step_size_param):
     grad = objective_function.evaluate_grad(x)

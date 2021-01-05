@@ -14,13 +14,18 @@ def numba_project_onto_active_set(
     quadratic_coefficient,
     linear_vector,
     constant,
-    active_set_matrix,
-    barycentric_coord,
+    active_set,
+    barycentric,
     FW_criterion,
     tolerance,
     coefficient,
     reference_point,
 ):
+    active_set_matrix = np.zeros((len(active_set), len(active_set[0])), active_set[0].dtype)
+    for i in range(len(active_set)):
+        active_set_matrix[i,:] = active_set[i]
+    barycentric_coord = np.asarray(barycentric)
+    
     quadratic = quadratic_coefficient*active_set_matrix.dot(active_set_matrix.T)
     linear = active_set_matrix.dot(linear_vector)
     x, polished_barycentric_coordinates, gap_values1 = accelerated_projected_gradient_descent_over_simplex(
@@ -58,8 +63,7 @@ def lp_oracle_simplex(x):
 @jit(nopython = True)
 def gradient(Q, b, x):
     return b + Q.dot(x)
-
-
+    
 @jit(nopython = True)
 def accelerated_projected_gradient_descent_over_simplex(
     quadratic,

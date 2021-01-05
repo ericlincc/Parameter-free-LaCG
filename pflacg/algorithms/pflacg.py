@@ -37,6 +37,10 @@ class ParameterFreeLaCG(_AbstractAlgorithm):
 
 class FractionalAwayStepFW(_AbstractAlgorithm):
     def __init__(self, fw_variant = "AFW", ratio=0.5, **kwargs):
+        assert (
+            fw_variant == "AFW"
+            or fw_variant == "PFW"
+        ), "Wrong variant supplied to the adaptive algorithm"
         self.ratio = 0.5
         self.fw_variant = fw_variant
         pass

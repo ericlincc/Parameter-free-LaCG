@@ -365,7 +365,6 @@ def accelerated_projected_gradient_descent(
     it_count = 0
     gap_values = [FWGap]
     while stopping_criterion.evaluate(x[-1], FWGap):
-        print("FW gap: ", FWGap)
         x.append(feasible_region.projection(y - 1 / L * f.gradient(y)))
         if(mu < 1.0e-3):
             alpha.append(0.5 * (1 + np.sqrt(1 + 4 * alpha[-1] * alpha[-1])))

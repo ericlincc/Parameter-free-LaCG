@@ -178,3 +178,44 @@ class HuberLoss(_AbstractObjectiveFunction):
 
     def update_self(self):
         pass
+
+
+class RegularizedObjectiveFunction(_AbstractObjectiveFunction):
+    """Regularize an objective function with a quadratic function.
+    f_{delta} (x) = f (x) + sigma * ||x - x_0||_2^2 / 2
+    """
+
+    def __init__(self, objective_function, sigma, reference_point):
+        self.objective_function = objective_function
+        self.sigma = sigma
+        self.reference_point = reference_point
+
+        if not self.objective_function.dim == self.reference_point.shape[0]:
+            raise ValueError("Dimension of reference_point does not equal that of objective_function")
+        self._dim = objective_function.dim
+
+    @property
+    def dim(self):
+        return self._dim
+
+    @property
+    def smallest_eigenvalue(self):
+        return self.objective_function.smallest_eigenvalue + sigma
+
+    @property
+    def largest_eigenvalue(self):
+        return self.objective_function.largest_eigenvalue + sigma
+
+    def line_search(self, grad, d):
+        pass
+
+    def update_self(self, *args, **kwargs):
+        pass
+
+    def evaluate(self, x):
+        _x = x - self.reference_point
+        return self.objective_function.evaluate(x) + self.sigma / 2.0 * np.dot(_x, _x)
+
+    def evaluate_grad(self, x):
+        _x = x - self.reference_point
+        return self.objective_function.evaluate_grad(x) + self.sigma * _x

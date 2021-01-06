@@ -7,7 +7,7 @@ import math
 
 import numpy as np
 
-from pflacg.experiments.experiments_helper import max_vertex
+from pflacg.experiments.experiments_helper import max_vertex_old, max_vertex
 
 
 logging.basicConfig(
@@ -56,6 +56,9 @@ class ConvexHull(_AbstractFeasibleRegion):
 
     def away_oracle(self, d, active_vertices):
         return max_vertex(d, active_vertices)
+    
+    def away_oracle_old(self, d, active_vertices):
+        return max_vertex_old(d, active_vertices)
 
     def projection(self, x, accuracy):
         pass
@@ -84,6 +87,9 @@ class BirkhoffPolytope(_AbstractFeasibleRegion):
 
     def away_oracle(self, grad, active_vertex):
         return max_vertex(grad, active_vertex)
+
+    def away_oracle_old(self, grad, active_vertex):
+        return max_vertex_old(grad, active_vertex)
 
 
 class ProbabilitySimplexPolytope(_AbstractFeasibleRegion):
@@ -116,6 +122,10 @@ class ProbabilitySimplexPolytope(_AbstractFeasibleRegion):
 
     def away_oracle(self, grad, active_vertex):
         return max_vertex(grad, active_vertex)
+    
+    def away_oracle_old(self, grad, active_vertex):
+        return max_vertex_old(grad, active_vertex)
+
 
     def projection(self, x):
         (n,) = x.shape  # will raise ValueError if v is not 1-D
@@ -152,6 +162,9 @@ class L1UnitBallPolytope(_AbstractFeasibleRegion):
 
     def away_oracle(self, grad, active_vertex):
         return max_vertex(grad, active_vertex)
+    
+    def away_oracle_old(self, grad, active_vertex):
+        return max_vertex_old(grad, active_vertex)
 
     def projection(self, x):
         u = np.abs(x)
@@ -192,6 +205,9 @@ class L2UnitBallPolytope(_AbstractFeasibleRegion):
 
     def away_oracle(self, grad, active_vertex):
         return max_vertex(grad, active_vertex)
+    
+    def away_oracle_old(self, grad, active_vertex):
+        return max_vertex_old(grad, active_vertex)
     
     def projection(self, x):
         return x / np.linalg.norm(x)

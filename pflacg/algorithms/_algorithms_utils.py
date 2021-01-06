@@ -19,6 +19,103 @@ LOGGER = logging.getLogger()
 DISPLAY_DECIMALS = 10
 
 
+
+
+class Point:
+    """Immutable abstraction of a point with respect to its support.
+    """
+
+    def __init__(
+        self,
+        cartesian_coordinates,
+        barycentric_coordinates,
+        support,
+    ):
+        """
+        Parameters
+        ----------
+        cartesian_coordinates: numpy.ndarray
+        barycentric_coordinates: tuple(float)
+        support: tuple(numpy.ndarray)
+        """
+
+        if not len(barycentric_coordinates) == len(support):
+            raise ValueError("Lengths of barycentric_coordinates and support not equal")
+
+        self.cartesian_coordinates = cartesian_coordinates
+        self.barycentric_coordinates = barycentric_coordinates
+        self.support = support
+
+    def __add__(self, P):
+        """Overloading addition."""
+
+        # Checking if addition is valid
+        if not isinstance(P, Point):
+            raise TypeError("Cannot add non-Point object with a Point object")
+        if not len(self.support) == len(P.support):
+            raise ValueError("Cannot add two Points with different support")
+        for vertex1, vertex2 in zip(self.support, P.support):
+            if not id(vertex1) == id(vertex2):
+                raise ValueError("Cannot add two Points with different support")
+          
+        return Point(
+            self.cartesian_coordinates + P.cartesian_coordinates,
+            tuple([b1 + b2 for b1, b2 in zip(self.barycentric_coordinates, P.barycentric_coordinates)]),
+            self.support,
+        )
+            
+    def __sub__(self, P):
+        """Overloading substraction."""
+
+        # Checking if substraction is valid
+        if not isinstance(P, Point):
+            raise TypeError("Cannot add non-Point object with a Point object")
+        if not len(self.support) == len(P.support):
+            raise ValueError("Cannot add two Points with different support")
+        for vertex1, vertex2 in zip(self.support, P.support):
+            if not id(vertex1) == id(vertex2):
+                raise ValueError("Cannot add two Points with different support")
+
+        return Point(
+            self.cartesian_coordinates - P.cartesian_coordinates,
+            tuple([b1 - b2 for b1, b2 in zip(self.barycentric_coordinates, P.barycentric_coordinates)]),
+            self.support,
+        )
+    
+    def __mul__(self, t):
+        return Point(
+            self.cartesian_coordinates * t,
+            tuple([i * t for i in self.barycentric_coordinates]),
+            self.support
+        )
+
+    __radd__ = __add__
+    __rmul__ = __mul__
+    
+    #Checks if new_vertex is in the support. If it is, then it returns
+    #a representation of new_vertex as a Point using the current support.
+    #Otherwise if it is not in the support it returns a representation of 
+    #new_vertex as a Point using an expanded support (current support plus new_vertex).
+    def is_vertex_in_support(self, new_vertex):
+        for i in range(len(self.support)):
+            if np.array_equal(self.support[i], new_vertex):
+                barycentric = np.zeros(len(self.support))
+                barycentric[i] = 1.0
+                return True, Point(self.support[i], tuple(barycentric), self.support)
+        barycentric = np.zeros(len(self.support) + 1)
+        barycentric[-1] = 1.0
+        new_list = list(self.support)
+        new_list.append(new_vertex)
+        return False, Point(new_vertex, tuple(barycentric), tuple(new_list))
+    
+    def delete_vertex_in_support(self, index):
+        barycentric = list(self.barycentric_coordinates)
+        support = list(self.support)
+        del barycentric[index]
+        del support[index]
+        return Point(self.cartesian_coordinates, tuple(barycentric), tuple(support))
+        
+
 class ExitCriterion:
     """Stores parameters to determine the exit criterion."""
 
@@ -197,11 +294,10 @@ def calculate_stepsize(x, d):
 def project_onto_active_set(
     quadratic_coefficient,
     linear_vector,
-    constant,
     active_set,
     barycentric_coordinates,
     stopping_criterion,
-    threshold=0.0,
+    barycentric_threshold=0.0,
     time_limit=np.inf,
     max_steps = np.inf,
 ):
@@ -209,16 +305,12 @@ def project_onto_active_set(
     Minimizes the objective function:
         f(u) = quadratic_coefficient*u^Tu + linear_vector^Tu + constant 
     over the vertices in active set until the stopping criterion is satisfied.
-
     Parameters
     ----------
     quadratic_coefficient : float.
         Coefficient that accompanies the quadratic term in objective function.
     linear_vector: numpy array
         Numpy array that accompanies linear term in objective function
-    constant : float
-        Constant term in the objective function (it is not involved in any of
-                                                 the computations).
     active_set : list of numpy arrays
         Contains the vertices over which we will minimize.
     barycentric_coordinates : list of float
@@ -226,7 +318,7 @@ def project_onto_active_set(
     stopping_criterion : class
         Class that contains a function "evaluate" that determines if the exit 
         criteria has been met.
-    threshold : float
+    barycentric_threshold : float
         Threshold for the barycentric coordinates. Any value in the barycentric
         coordinates below this value will be set to zero and the corresponding
         weight will be assigned to the other vertices.
@@ -251,8 +343,8 @@ def project_onto_active_set(
     # Create objective function and feasible region.
     from pflacg.experiments.feasible_regions import ProbabilitySimplexPolytope
     feas_reg = ProbabilitySimplexPolytope(len(active_set))
-    projection_objective_fun = projection_objective_function(quadratic, linear, constant)
-    x, polished_barycentric_coordinates, gap_values1 = accelerated_projected_gradient_descent(
+    projection_objective_fun = projection_objective_function(quadratic, linear, 0.0)
+    x, x_barycentric_coordinates, gap_values1 = accelerated_projected_gradient_descent(
         projection_objective_fun,
         feas_reg,
         active_set,
@@ -260,8 +352,19 @@ def project_onto_active_set(
         barycentric_coordinates,
         time_limit = time_limit,
         max_iteration = max_steps
+    )
+
+    if barycentric_threshold > 0.0:
+        active_set, barycentric_coordinates = remove_vertives(
+            active_set,
+            x_barycentric_coordinates,
+            barycentric_threshold,
         )
-    return remove_vertives(active_set, polished_barycentric_coordinates, threshold)
+
+    x = np.zeros(active_set[0].shape)
+    for i in range(len(active_set)):
+        x += barycentric_coordinates[i] * active_set[i]
+    return x, active_set, barycentric_coordinates
 
 class stopping_criterion:
     """
@@ -289,12 +392,11 @@ class stopping_criterion:
         else:
             return self.coefficient*np.linalg.norm(x - self.reference_point)**2 < FW_gap
 
-
-def remove_vertives(active_set, barycentric_coordinates, threshold):
+def remove_vertives(active_set, barycentric_coordinates, barycentric_threshold):
     new_active_set = []
     new_barycentric_coordinates = []
     for i in range(len(active_set)):
-        if barycentric_coordinates[i] > threshold:
+        if barycentric_coordinates[i] > barycentric_threshold:
             new_active_set.append(active_set[i])
             new_barycentric_coordinates.append(barycentric_coordinates[i])
     aux = sum(new_barycentric_coordinates)
@@ -302,10 +404,7 @@ def remove_vertives(active_set, barycentric_coordinates, threshold):
         x + (1.0 - aux) / len(new_barycentric_coordinates)
         for x in new_barycentric_coordinates
     ]
-    x = np.zeros(active_set[0].shape)
-    for i in range(len(new_active_set)):
-        x += new_barycentric_coordinates[i] * new_active_set[i]
-    return x, new_active_set, new_barycentric_coordinates
+    return new_active_set, new_barycentric_coordinates
 
 def accelerated_projected_gradient_descent(
     f,

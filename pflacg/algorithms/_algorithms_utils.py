@@ -116,8 +116,27 @@ class Point:
         del barycentric[index]
         del support[index]
         return Point(self.cartesian_coordinates, tuple(barycentric), tuple(support))
+    
+    def max_min_vertex(self, grad):
+        maxProd = grad.dot(self.support[0])
+        minProd = grad.dot(self.support[0])
+        maxInd = 0
+        minInd = 0
+        for i in range(len(self.support)):
+            if grad.dot(self.support[i]) > maxProd:
+                maxProd = grad.dot(self.support[i])
+                maxInd = i
+            else:
+                if grad.dot(self.support[i]) < minProd:
+                    minProd = np.dot(self.support[i], grad)
+                    minInd = i
+        barycentric_max = np.zeros(len(self.support))
+        barycentric_max[maxInd] = 1.0
+        barycentric_min = np.zeros(len(self.support))
+        barycentric_min[minInd] = 1.0
+        return Point(self.support[maxInd], tuple(barycentric_max), self.support), maxInd, Point(self.support[minInd], tuple(barycentric_min), self.support), minInd
+    
         
-
 class ExitCriterion:
     """Stores parameters to determine the exit criterion."""
 
@@ -294,7 +313,7 @@ def calculate_stepsize(x, d):
         return min(val)
 
 
-def max_min_vertex(grad, active_set):
+def max_min_vertex_backup(grad, active_set):
     maxProd = np.dot(active_set[0], grad)
     minProd = np.dot(active_set[0], grad)
     maxInd = 0
@@ -310,7 +329,7 @@ def max_min_vertex(grad, active_set):
     return active_set[maxInd], maxInd, active_set[minInd], minInd
 
 
-def max_min_vertex_quick_exit(feasible_region, grad, x, active_set, phi, K):
+def max_min_vertex_quick_exit_backup(feasible_region, grad, x, active_set, phi, K):
     for i in range(len(active_set)):
         if np.dot(grad, active_set[i] - x) >= phi / K:
             return active_set[i], i, None, None

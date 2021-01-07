@@ -10,7 +10,7 @@ from pflacg.algorithms._abstract_algorithm import _AbstractAlgorithm
 
 from pflacg.algorithms._algorithms_utils import step_size, DISPLAY_DECIMALS, new_vertex_fail_fast, delete_vertex_index, calculate_stepsize
 
-from pflacg.algorithms._algorithms_utils import Point, max_min_vertex, max_min_vertex_quick_exit
+from pflacg.algorithms._algorithms_utils import Point, max_min_vertex_backup, max_min_vertex_quick_exit_backup
 
 
 logging.basicConfig(
@@ -64,6 +64,7 @@ class FrankWolfe(_AbstractAlgorithm):
             or fw_variant == "PFW"
             or fw_variant == "FW"
             or fw_variant == "DIPFW"
+            or fw_variant == "lazy"
         ), "Wrong variant supplied to the adaptive algorithm"
         assert (
             step_type == "line_search" or step_type == "adaptive_short_step"
@@ -121,7 +122,9 @@ class FrankWolfe(_AbstractAlgorithm):
             )
             run_history = [run_status]
 
-
+        if self.fw_variant == "lazy" or self.fw_variant == "lazy quick exit":
+            phiVal = [dual_gap]
+            
         while not exit_criterion.has_met_exit_criterion(run_status):
             if self.fw_variant == "AFW":
                 x, dual_gap, strong_wolfe_gap = away_step_fw(
@@ -144,6 +147,22 @@ class FrankWolfe(_AbstractAlgorithm):
                     x,
                     self.step_size_param,
                 )
+            if self.fw_variant == "lazy":
+                x, dual_gap, strong_wolfe_gap = FW_away_lazy(
+                    objective_function,
+                    feasible_region,
+                    x,
+                    self.step_size_param,
+                    phiVal,
+                )
+            # if self.fw_variant == "lazy quick exit":
+            #     x, dual_gap, strong_wolfe_gap = FW_away_lazy_quick_exit(
+            #         objective_function,
+            #         feasible_region,
+            #         x,
+            #         self.step_size_param,
+            #         phiVal,
+            #     )
             if self.fw_variant == "DIPFW":
                 x, dual_gap, strong_wolfe_gap = DIPFW(objective_function, feasible_region, x, self.step_size_param)
             iteration += 1
@@ -261,6 +280,58 @@ def DIPFW(objective_function, feasible_region, point_x, step_size_param):
     new_cartesian = point_x.cartesian_coordinates + alpha * d
     return Point(new_cartesian, (1.0,), (new_cartesian,)), grad.dot(point_x.cartesian_coordinates - v), 0.0
 
+def FW_away_lazy(objective_function, feasible_region, point_x, step_size_param, phiVal, K = 2.0):
+    grad = objective_function.evaluate_grad(point_x.cartesian_coordinates)
+    point_a, indexMax, point_v, indexMin = point_x.max_min_vertex(grad)
+    # Use old FW vertex.
+    if (
+        grad.dot(point_x.cartesian_coordinates - point_v.cartesian_coordinates) >= grad.dot(point_a.cartesian_coordinates - point_x.cartesian_coordinates)
+        and grad.dot(point_x.cartesian_coordinates - point_v.cartesian_coordinates) >= phiVal[0] / K
+    ):
+        print("lazy FW", len(point_x.support))
+        alphaMax = 1.0
+        alpha = step_size(
+            objective_function, point_x.cartesian_coordinates, point_v.cartesian_coordinates - point_x.cartesian_coordinates, grad, alphaMax, step_size_param
+        )
+        if alpha != alphaMax:
+            return point_x + alpha*(point_v - point_x), grad.dot(point_x.cartesian_coordinates - point_v.cartesian_coordinates), 0.0
+        else:
+            return point_v, grad.dot(point_x.cartesian_coordinates - point_v.cartesian_coordinates),  0.0
+    else:
+        if (
+            grad.dot(point_a.cartesian_coordinates - point_x.cartesian_coordinates) > grad.dot(point_x.cartesian_coordinates - point_v.cartesian_coordinates)
+            and grad.dot(point_a.cartesian_coordinates - point_x.cartesian_coordinates) >= phiVal[0] / K
+        ):
+            print("lazy AFW", len(point_x.support))
+            alphaMax = point_x.barycentric_coordinates[indexMax] / (1.0 - point_x.barycentric_coordinates[indexMax])
+            alpha = step_size(
+                objective_function, point_x.cartesian_coordinates, point_x.cartesian_coordinates - point_a.cartesian_coordinates, grad, alphaMax, step_size_param
+            )
+            point_x = point_x + alpha * (point_x - point_a)
+            if alpha == alphaMax:
+                point_x = point_x.delete_vertex_in_support(indexMax)
+            return point_x, grad.dot(point_x.cartesian_coordinates - point_v.cartesian_coordinates), 0.0
+        else:
+            v = feasible_region.lp_oracle(grad)
+            if np.dot(grad, point_x.cartesian_coordinates - v) >= phiVal[0] / K:
+                print("FW", len(point_x.support))
+                flag, point_v = point_x.is_vertex_in_support(v)
+                if(flag == False):
+                    new_barycentric_coordinates = list(np.zeros(len(point_x.barycentric_coordinates)))
+                    new_barycentric_coordinates.append(0.0)
+                    point_x = Point(point_x.cartesian_coordinates, tuple(new_barycentric_coordinates), point_v.support)
+                alphaMax = 1.0
+                alpha = step_size(
+                    objective_function, point_x.cartesian_coordinates, point_v.cartesian_coordinates - point_x.cartesian_coordinates, grad, alphaMax, step_size_param
+                )
+                if alpha != alphaMax:
+                    return point_x + alpha*(point_v - point_x), grad.dot(point_x.cartesian_coordinates - point_v.cartesian_coordinates), 0.0
+                else:
+                    return Point(v, (1.0,), (v,)), grad.dot(point_x.cartesian_coordinates - point_v.cartesian_coordinates), 0.0
+            else:
+                print("refine", len(point_x.support))
+                phiVal[0] = min(grad.dot(point_x.cartesian_coordinates - v), phiVal[0] / 2.0)
+                return point_x, grad.dot(point_x.cartesian_coordinates - v), 0.0
 
 class FrankWolfe_backup(_AbstractAlgorithm):
     """
@@ -403,7 +474,7 @@ class FrankWolfe_backup(_AbstractAlgorithm):
                 )
                 
             if self.fw_variant == "lazy":
-                x, dual_gap, strong_wolfe_gap = FW_away_lazy1(
+                x, dual_gap, strong_wolfe_gap = FW_away_lazy_backup(
                     objective_function,
                     feasible_region,
                     x,
@@ -413,7 +484,7 @@ class FrankWolfe_backup(_AbstractAlgorithm):
                     phiVal,
                 )
             if self.fw_variant == "lazy quick exit":
-                x, dual_gap, strong_wolfe_gap = FW_away_lazy_quick_exit(
+                x, dual_gap, strong_wolfe_gap = FW_away_lazy_quick_exit_backup(
                     objective_function,
                     feasible_region,
                     x,
@@ -555,14 +626,15 @@ def DIPFW_backup(objective_function, feasible_region, x, step_size_param):
     )
     return x + alpha * d, grad.dot(x - v), 0.0
 
-def FW_away_lazy1(objective_function, feasible_region, x, active_set, lambdas, step_size_param, phiVal, K = 2.0):
+def FW_away_lazy_backup(objective_function, feasible_region, x, active_set, lambdas, step_size_param, phiVal, K = 2.0):
     grad = objective_function.evaluate_grad(x)
-    a, indexMax, v, indexMin = max_min_vertex(grad, active_set)
+    a, indexMax, v, indexMin = max_min_vertex_backup(grad, active_set)
     # Use old FW vertex.
     if (
         np.dot(grad, x - v) >= np.dot(grad, a - x)
         and np.dot(grad, x - v) >= phiVal[0] / K
     ):
+        print("lazy FW", len(active_set))
         d = v - x
         alphaMax = 1.0
         # alpha = step_size(objective_function, x, d, grad, i, step_size_param)
@@ -581,6 +653,7 @@ def FW_away_lazy1(objective_function, feasible_region, x, active_set, lambdas, s
             np.dot(grad, a - x) > np.dot(grad, x - v)
             and np.dot(grad, a - x) >= phiVal[0] / K
         ):
+            print("lazy AFW", len(active_set))
             d = x - a
             alphaMax = lambdas[indexMax] / (
                 1.0 - lambdas[indexMax]
@@ -600,6 +673,7 @@ def FW_away_lazy1(objective_function, feasible_region, x, active_set, lambdas, s
         else:
             v = feasible_region.lp_oracle(grad)
             if np.dot(grad, x - v) >= phiVal[0] / K:
+                print("FW", len(active_set))
                 d = v - x
                 
                 
@@ -617,15 +691,16 @@ def FW_away_lazy1(objective_function, feasible_region, x, active_set, lambdas, s
                     active_set[:] = [v]
                     lambdas[:] = [alphaMax]
             else:
+                print("refine", len(active_set))
                 phiVal[0] = min(np.dot(grad, x - v), phiVal[0] / 2.0)
                 alpha = 0.0
                 d = np.zeros(len(x))
     return x + alpha * d, grad.dot(x - v), grad.dot(a - v)
 
 
-def FW_away_lazy_quick_exit(objective_function, feasible_region, x, active_set, lambdas, step_size_param, phiVal, K = 2.0):
+def FW_away_lazy_quick_exit_backup(objective_function, feasible_region, x, active_set, lambdas, step_size_param, phiVal, K = 2.0):
     grad = objective_function.grad(x)
-    a, indexMax, v, indexMin = max_min_vertex_quick_exit(
+    a, indexMax, v, indexMin = max_min_vertex_quick_exit_backup(
         feasible_region, grad, x, active_set, phiVal, K
     )
     if v is not None and np.dot(grad, x - v) >= phiVal / K:

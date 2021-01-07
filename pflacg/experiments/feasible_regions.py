@@ -74,7 +74,7 @@ class BirkhoffPolytope(_AbstractFeasibleRegion):
 
     @property
     def initial_active_set(self):
-        return [self.initial_point]
+        return [self.initial_point()]
 
     def lp_oracle(self, x):
         from scipy.optimize import linear_sum_assignment
@@ -104,7 +104,7 @@ class ProbabilitySimplexPolytope(_AbstractFeasibleRegion):
 
     @property
     def initial_active_set(self):
-        return [self.initial_point]
+        return [self.initial_point()]
 
     def lp_oracle(self, x):
         v = np.zeros(len(x), dtype=float)
@@ -152,7 +152,7 @@ class L1UnitBallPolytope(_AbstractFeasibleRegion):
 
     @property
     def initial_active_set(self):
-        return [self.initial_point]
+        return [self.initial_point()]
 
     def lp_oracle(self, x):
         v = np.zeros(len(x), dtype=float)
@@ -198,7 +198,7 @@ class L2UnitBallPolytope(_AbstractFeasibleRegion):
 
     @property
     def initial_active_set(self):
-        return [self.initial_point]
+        return [self.initial_point()]
 
     def lp_oracle(self, x):
         return -x / np.linalg.norm(x)

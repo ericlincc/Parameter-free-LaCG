@@ -108,11 +108,9 @@ class Quadratic(_AbstractObjectiveFunction):
     def dim(self):
         return self._dim
 
-    @property
     def smallest_eigenvalue(self):
         return self.Mu
 
-    @property
     def largest_eigenvalue(self):
         return self.L
 

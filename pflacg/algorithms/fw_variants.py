@@ -97,7 +97,7 @@ class FrankWolfe(_AbstractAlgorithm):
             vertex = feasible_region.initial_point.copy()
             x = Point(vertex, (1.0,), (vertex,))
         else:
-            x = point_initial.copy()
+            x = point_initial
 
         start_time = time.time()
         grad = objective_function.evaluate_grad(x.cartesian_coordinates)

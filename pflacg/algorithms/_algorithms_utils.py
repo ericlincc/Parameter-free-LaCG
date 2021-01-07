@@ -128,7 +128,7 @@ class Point:
                 maxInd = i
             else:
                 if grad.dot(self.support[i]) < minProd:
-                    minProd = np.dot(self.support[i], grad)
+                    minProd = grad.dot(self.support[i])
                     minInd = i
         barycentric_max = np.zeros(len(self.support))
         barycentric_max[maxInd] = 1.0

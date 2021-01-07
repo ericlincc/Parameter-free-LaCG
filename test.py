@@ -12,7 +12,7 @@ from pflacg.experiments.feasible_regions import ProbabilitySimplexPolytope, Birk
 
 import numpy as np
 
-test_exit_criterion = ExitCriterion("DG", 1.0e-12, criterion_reference=0.0, max_time=60.0, max_iter=100)
+test_exit_criterion = ExitCriterion("DG", 1.0e-12, criterion_reference=0.0, max_time=60.0, max_iter=1000)
 dimension = 1000
 matrix = np.random.rand(dimension, dimension)
 M = matrix.T.dot(matrix)
@@ -34,7 +34,7 @@ results_new = FW_algorithm_new.run(function, feasible_region, test_exit_criterio
 FW_algorithm = FrankWolfe_backup("lazy", "line_search")
 results_old = FW_algorithm.run(function, feasible_region, test_exit_criterion)
 
-# FW_algorithm2 = FrankWolfe_backup("lazy", "line_search")
+# FW_algorithm2 = FrankWolfe_backup("AFW", "line_search")
 # results_old2 = FW_algorithm2.run(function, feasible_region, test_exit_criterion)
 
 dual_gap_new = [dual_gap for iteration, duration, f_val, dual_gap, strong_wolfe_gap in results_new]

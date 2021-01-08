@@ -327,7 +327,6 @@ def FW_away_lazy(objective_function, feasible_region, point_x, step_size_param, 
                     new_barycentric_coordinates = list(np.zeros(len(point_x.barycentric_coordinates)))
                     new_barycentric_coordinates.append(0.0)
                     point_x = Point(point_x.cartesian_coordinates, tuple(new_barycentric_coordinates), point_v.support)
-   
                 if alpha != alphaMax:
                     return point_x + alpha*(point_v - point_x), grad.dot(point_x.cartesian_coordinates - point_v.cartesian_coordinates), 0.0
                 else:

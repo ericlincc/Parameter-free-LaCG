@@ -91,7 +91,6 @@ class BirkhoffPolytope(_AbstractFeasibleRegion):
     def away_oracle_old(self, grad, active_vertex):
         return max_vertex_old(grad, active_vertex)
 
-
 class ProbabilitySimplexPolytope(_AbstractFeasibleRegion):
     def __init__(self, dim):
         self.dim = dim

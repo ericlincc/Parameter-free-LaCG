@@ -51,28 +51,90 @@ class Point:
         if not isinstance(P, Point):
             raise TypeError("Cannot add non-Point object with a Point object")
         if not len(self.support) == len(P.support):
-            raise ValueErroe("Cannot add two Points with different support")
+            raise ValueError("Cannot add two Points with different support")
         for vertex1, vertex2 in zip(self.support, P.support):
             if not id(vertex1) == id(vertex2):
-                raise ValueErroe("Cannot add two Points with different support")
-
+                raise ValueError("Cannot add two Points with different support")
+          
         return Point(
             self.cartesian_coordinates + P.cartesian_coordinates,
-            [b1 + b2 for b1, b2 in zip(self.barycentric_coordinates, P.barycentric_coordinates)],
+            tuple([b1 + b2 for b1, b2 in zip(self.barycentric_coordinates, P.barycentric_coordinates)]),
             self.support,
         )
+            
+    def __sub__(self, P):
+        """Overloading substraction."""
 
+        # Checking if substraction is valid
+        if not isinstance(P, Point):
+            raise TypeError("Cannot add non-Point object with a Point object")
+        if not len(self.support) == len(P.support):
+            raise ValueError("Cannot add two Points with different support")
+        for vertex1, vertex2 in zip(self.support, P.support):
+            if not id(vertex1) == id(vertex2):
+                raise ValueError("Cannot add two Points with different support")
+
+        return Point(
+            self.cartesian_coordinates - P.cartesian_coordinates,
+            tuple([b1 - b2 for b1, b2 in zip(self.barycentric_coordinates, P.barycentric_coordinates)]),
+            self.support,
+        )
+    
     def __mul__(self, t):
         return Point(
             self.cartesian_coordinates * t,
-            self.barycentric_coordinates * t,
+            tuple([i * t for i in self.barycentric_coordinates]),
             self.support
         )
 
+    __rsub__ = __sub__
     __radd__ = __add__
     __rmul__ = __mul__
-
-
+    
+    #Checks if new_vertex is in the support. If it is, then it returns
+    #a representation of new_vertex as a Point using the current support.
+    #Otherwise if it is not in the support it returns a representation of 
+    #new_vertex as a Point using an expanded support (current support plus new_vertex).
+    def is_vertex_in_support(self, new_vertex):
+        for i in range(len(self.support)):
+            # if np.array_equal(self.support[i], new_vertex):
+             if np.allclose(self.support[i], new_vertex):
+                barycentric = np.zeros(len(self.support))
+                barycentric[i] = 1.0
+                return True, Point(self.support[i], tuple(barycentric), self.support)
+        barycentric = np.zeros(len(self.support) + 1)
+        barycentric[-1] = 1.0
+        new_list = list(self.support)
+        new_list.append(new_vertex)
+        return False, Point(new_vertex, tuple(barycentric), tuple(new_list))
+    
+    def delete_vertex_in_support(self, index):
+        barycentric = list(self.barycentric_coordinates)
+        support = list(self.support)
+        del barycentric[index]
+        del support[index]
+        return Point(self.cartesian_coordinates, tuple(barycentric), tuple(support))
+    
+    def max_min_vertex(self, grad):
+        maxProd = grad.dot(self.support[0])
+        minProd = grad.dot(self.support[0])
+        maxInd = 0
+        minInd = 0
+        for i in range(len(self.support)):
+            if grad.dot(self.support[i]) > maxProd:
+                maxProd = grad.dot(self.support[i])
+                maxInd = i
+            else:
+                if grad.dot(self.support[i]) < minProd:
+                    minProd = grad.dot(self.support[i])
+                    minInd = i
+        barycentric_max = np.zeros(len(self.support))
+        barycentric_max[maxInd] = 1.0
+        barycentric_min = np.zeros(len(self.support))
+        barycentric_min[minInd] = 1.0
+        return Point(self.support[maxInd], tuple(barycentric_max), self.support), maxInd, Point(self.support[minInd], tuple(barycentric_min), self.support), minInd
+    
+        
 class ExitCriterion:
     """Stores parameters to determine the exit criterion."""
 
@@ -249,6 +311,31 @@ def calculate_stepsize(x, d):
         return min(val)
 
 
+def max_min_vertex_backup(grad, active_set):
+    maxProd = np.dot(active_set[0], grad)
+    minProd = np.dot(active_set[0], grad)
+    maxInd = 0
+    minInd = 0
+    for i in range(len(active_set)):
+        if np.dot(active_set[i], grad) > maxProd:
+            maxProd = np.dot(active_set[i], grad)
+            maxInd = i
+        else:
+            if np.dot(active_set[i], grad) < minProd:
+                minProd = np.dot(active_set[i], grad)
+                minInd = i
+    return active_set[maxInd], maxInd, active_set[minInd], minInd
+
+
+def max_min_vertex_quick_exit_backup(feasible_region, grad, x, active_set, phi, K):
+    for i in range(len(active_set)):
+        if np.dot(grad, active_set[i] - x) >= phi / K:
+            return active_set[i], i, None, None
+        if np.dot(grad, x - active_set[i]) >= phi / K:
+            return None, None, active_set[i], i
+    v = feasible_region.linear_optimization_oracle(grad)
+    return None, None, v, None
+
 def project_onto_active_set(
     quadratic_coefficient,
     linear_vector,
@@ -263,7 +350,6 @@ def project_onto_active_set(
     Minimizes the objective function:
         f(u) = quadratic_coefficient*u^Tu + linear_vector^Tu + constant 
     over the vertices in active set until the stopping criterion is satisfied.
-
     Parameters
     ----------
     quadratic_coefficient : float.
@@ -302,7 +388,7 @@ def project_onto_active_set(
     # Create objective function and feasible region.
     from pflacg.experiments.feasible_regions import ProbabilitySimplexPolytope
     feas_reg = ProbabilitySimplexPolytope(len(active_set))
-    projection_objective_fun = projection_objective_function(quadratic, linear, constant)
+    projection_objective_fun = projection_objective_function(quadratic, linear, 0.0)
     x, x_barycentric_coordinates, gap_values1 = accelerated_projected_gradient_descent(
         projection_objective_fun,
         feas_reg,
@@ -420,14 +506,13 @@ def accelerated_projected_gradient_descent(
         alpha = deque([0], maxlen=2)
     else:
         alpha = deque([np.sqrt(q)], maxlen=2)
-    grad = f.gradient(x[-1])
+    grad = f.evaluate_grad(x[-1])
     FWGap = grad.dot(x[-1] - feasible_region.lp_oracle(grad))
     time_ref = time.time()
     it_count = 0
     gap_values = [FWGap]
     while stopping_criterion.evaluate(x[-1], FWGap):
-        print("FW gap: ", FWGap)
-        x.append(feasible_region.projection(y - 1 / L * f.gradient(y)))
+        x.append(feasible_region.projection(y - 1 / L * f.evaluate_grad(y)))
         if(mu < 1.0e-3):
             alpha.append(0.5 * (1 + np.sqrt(1 + 4 * alpha[-1] * alpha[-1])))
             beta = (alpha[-2] - 1.0) / alpha[-1]
@@ -438,7 +523,7 @@ def accelerated_projected_gradient_descent(
             alpha.append(root[0])
             beta = alpha[-2] * (1 - alpha[-2]) / (alpha[-2] ** 2 - alpha[-1])
         y = x[-1] + beta * (x[-1] - x[-2])
-        grad = f.gradient(x[-1])
+        grad = f.evaluate_grad(x[-1])
         FWGap = grad.dot(x[-1] - feasible_region.lp_oracle(grad))
         it_count += 1
         if time.time() - time_ref > time_limit or it_count > max_iteration:
@@ -449,6 +534,57 @@ def accelerated_projected_gradient_descent(
         w += x[-1][i] * active_set[i]
     return w, x[-1].tolist(), gap_values
 
+
+def projected_gradient_descent(
+    x0,
+    function,
+    feasible_region,
+    tolerance,
+):
+    """
+    Run projected gradient descent.
+
+    References
+    ----------
+    Cauchy, A. (1847). Méthode générale pour la résolution des systemes
+    d’équations simultanées. Comp. Rend. Sci. Paris, 25(1847), 536-538.
+
+    Parameters
+    ----------
+    x0 : numpy array.
+        Initial point.
+    function: function being minimized
+        Function that we will minimize. Gradients are computed through a
+        function.grad(x) function that returns the gradient at x as a
+        numpy array.
+    feasible_region : feasible region function.
+        Returns projection oracle of a point x onto the feasible region,
+        which are computed through the function feasible_region.project(x).
+        Additionally, a LMO is used to compute the Frank-Wolfe gap (used as a
+        stopping criterion) through the function
+        feasible_region.linear_optimization_oracle(grad) function, which
+        minimizes <x, grad> over the feasible region.
+    tolerance : float
+        Frank-Wolfe accuracy to which the solution is outputted.
+
+    Returns
+    -------
+    x : numpy array
+        Outputted solution with primal gap below the target tolerance
+    """
+    x = x0
+    grad = function.evaluate_grad(x)
+    L = function.largest_eigenvalue()
+    while (
+        np.dot(grad, x - feasible_region.lp_oracle(grad)) > tolerance
+    ):
+        new_x = feasible_region.projection(x - 1 / L * grad)
+        alpha = step_size(
+            function, x, new_x - x, grad, 1.0, {"type_step": "line_search"}
+        )
+        x = x + alpha*(new_x - x)
+        grad = function.evaluate_grad(x)
+    return x
 
 class projection_objective_function:
     import numpy as np
@@ -467,11 +603,11 @@ class projection_objective_function:
         return
 
     # Evaluate function.
-    def f(self, x):
+    def evaluate(self, x):
         return self.b.dot(x) + 0.5 * x.T.dot(self.Q.dot(x)) + self.constant
 
     # Evaluate gradient.
-    def gradient(self, x):
+    def evaluate_grad(self, x):
         return self.b + self.Q.dot(x)
 
     # Line Search.

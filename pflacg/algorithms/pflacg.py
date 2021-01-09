@@ -466,6 +466,10 @@ class ParameterFreeAGD(_AbstractAlgorithm):
 
 class FractionalAwayStepFW(_AbstractAlgorithm):
     def __init__(self, fw_variant = "AFW", ratio=0.5, **kwargs):
+        assert (
+            fw_variant == "AFW"
+            or fw_variant == "PFW"
+        ), "Wrong variant supplied to the adaptive algorithm"
         self.ratio = 0.5
         self.fw_variant = fw_variant
         pass
@@ -475,18 +479,17 @@ class FractionalAwayStepFW(_AbstractAlgorithm):
         self,
         objective_function,
         feasible_region,
-        initial_point,
-        active_set,
-        lambdas,
+        point_initial
     ):
-        grad = objective_function.evaluate_grad(initial_point)
+        grad = objective_function.evaluate_grad(point_initial.cartesian_coordinates)
         v = feasible_region.lp_oracle(grad)
-        a, indexMax = feasible_region.away_oracle(grad, active_set)
-        strong_FW_gap = np.dot(grad, a - v)
+        point_a, indexMax = feasible_region.away_oracle(grad, point_initial)
+        # a, indexMax = feasible_region.away_oracle(grad, active_set)
+        strong_FW_gap = np.dot(grad, point_a.cartesian_coordinates - v)
         target_accuracy = strong_FW_gap*self.ratio
         from pflacg.algorithms.fw_variants import FrankWolfe
         fw_algorithm = FrankWolfe(self.fw_variant, "line_search")
         from pflacg.algorithms._algorithms_utils import ExitCriterion
         exit_criterion = ExitCriterion("SWG", target_accuracy)
-        results = fw_algorithm.run(objective_function, feasible_region, exit_criterion, initial_point, active_set,lambdas, save_and_output_results = False)
+        results = fw_algorithm.run(objective_function, feasible_region, exit_criterion, point_initial, save_and_output_results = False)
         return results

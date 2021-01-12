@@ -24,6 +24,7 @@ LOGGER = logging.getLogger()
 
 WAIT_TIME_FOR_LOCK = 1
 
+ACCURACY = 32
 
 # Helper functions
 
@@ -74,7 +75,7 @@ class ParameterFreeLaCG(_AbstractAlgorithm):
             iteration,
             duration,
             f_val,
-            0.0,  # TODO: Fix or remove ummy dual gap
+            0.0,  # TODO: Fix or remove dummy dual gap
             strong_FW_gap_out,
         )
         run_history = [run_status]
@@ -125,9 +126,7 @@ class ParameterFreeLaCG(_AbstractAlgorithm):
                     dtype=np.float64,
                     buffer=ret_x_barycentric_coordinates_shm.buf,
                 )
-                ret_x_barycentric_coordinates[:] = point_x_ACC.barycentric_coordinates[
-                    :
-                ]
+                ret_x_barycentric_coordinates[:] = point_x_ACC.barycentric_coordinates[:]
 
                 shared_buffers_dict = {
                     "buffer_lock": buffer_lock,
@@ -189,8 +188,9 @@ class ParameterFreeLaCG(_AbstractAlgorithm):
                 np.copy(ret_x_barycentric_coordinates),
                 active_set_ACC,
             )
-            sigma = global_sigma.value
-            eta = global_eta.value
+            if ACC_process_started:
+                sigma = global_sigma.value
+                eta = global_eta.value
             buffer_lock.release()
 
             # Compute Strong Wolfe gap (or dual gap)
@@ -212,7 +212,7 @@ class ParameterFreeLaCG(_AbstractAlgorithm):
                     print("Terminating ACC")
                     ACC_process.terminate()
                     ACC_process.join()
-                    ACC_process_started = False
+                ACC_process_started = False
                 ret_x_barycentric_coordinates_shm.close()
                 ret_x_barycentric_coordinates_shm.unlink()
 
@@ -290,6 +290,9 @@ class ParameterFreeAGD:
         -------
 
         """
+        if len(feasible_region.vertices) <= 1:
+            return point_initial, initial_eta, initial_sigma, 0
+
         dim = objective_function.dim
 
         # Initial shared buffers based on shared_buffers_dict
@@ -319,35 +322,32 @@ class ParameterFreeAGD:
 
         # Initializtion
         point_x = point_initial
-        _eta = 1
-        point_x_plus = argmin_quadratic_over_active_set(
-            quadratic_coefficient=_eta / 2.0,
-            linear_vector=(
-                objective_function.evaluate_grad(point_x.cartesian_coordinates)
-                - _eta * point_x.cartesian_coordinates
-            ),
-            active_set=feasible_region.vertices,
-            reference_point=point_x,
-            tolerance_type="gradient mapping",
-            tolerance=1 / (32 * _eta),
-        )
-        grad_mapping = (
-            point_x.cartesian_coordinates - point_x_plus.cartesian_coordinates
-        )
+        if np.allclose(point_x.cartesian_coordinates, point_x.support[0]):
+            point_y = Point(
+                point_x.support[1],
+                [1. if i == 1 else 0. for i in range(len(point_x.support))],
+                point_x.support,
+            )
+        else:
+            point_y = Point(
+                point_x.support[0],
+                [1. if i == 0 else 0. for i in range(len(point_x.support))],
+                point_x.support,
+            )
 
         # Guess a eta if initial_sigma is None
         if initial_sigma is None:
             x = point_x.cartesian_coordinates
-            x_plus = point_x_plus.cartesian_coordinates
-            print("norm: " + str(np.linalg.norm(x_plus - x)))
+            y = point_y.cartesian_coordinates
+            print("norm: " + str(np.linalg.norm(y - x)))
             initial_sigma = (
                 2.0
                 * (
-                    objective_function.evaluate(x_plus)
+                    objective_function.evaluate(y)
                     - objective_function.evaluate(x)
-                    - np.dot(objective_function.evaluate_grad(x), x_plus - x)
+                    - np.dot(objective_function.evaluate_grad(x), y - x)
                 )
-                / (np.linalg.norm(x_plus - x) ** 2)
+                / (np.linalg.norm(y - x) ** 2)
             )
 
         # Set initial_eta to initial_sigma if initial_eta is None
@@ -357,6 +357,21 @@ class ParameterFreeAGD:
         sigma = initial_sigma
         iteration = 0
         print("initial_sigma: " + str(sigma))
+
+        point_x_plus = argmin_quadratic_over_active_set(
+            quadratic_coefficient=eta / 2.0,
+            linear_vector=(
+                objective_function.evaluate_grad(point_x.cartesian_coordinates)
+                - eta * point_x.cartesian_coordinates
+            ),
+            active_set=feasible_region.vertices,
+            reference_point=point_x,
+            tolerance_type="gradient mapping",
+            tolerance=1 / (ACCURACY * eta),
+        )
+        grad_mapping = (
+            point_x.cartesian_coordinates - point_x_plus.cartesian_coordinates
+        )
 
         while np.linalg.norm(grad_mapping) > epsilon:
             point_x, grad_mapping, eta, sigma, _iteration = self.ACC_iter(
@@ -385,11 +400,11 @@ class ParameterFreeAGD:
                     ]
                     global_eta.value = eta
                     global_sigma.value = sigma
+                    buffer_lock.release()
 
                     # Continue with the next ACC
                     with ACC_paused_flag.get_lock():
                         ACC_paused_flag.value = 0
-                    buffer_lock.release()
                     break
                 else:
                     # Pausing ACC's execution and sleep for some time.
@@ -430,6 +445,7 @@ class ParameterFreeAGD:
 
         """
 
+        print("ACC_iter")
         # Initialization
         point_x = point_initial
         a = 1
@@ -451,14 +467,15 @@ class ParameterFreeAGD:
                 active_set=feasible_region.vertices,
                 reference_point=point_x,
                 tolerance_type="gradient mapping",
-                tolerance=1 / (32 * (eta_0 + sigma)),
+                tolerance=1 / (ACCURACY * (eta_0 + sigma)),
             )
-            epsilon_0 = ((eta_0 + sigma) / 32.0) * (
+            epsilon_0 = ((eta_0 + sigma) / ACCURACY) * (
                 np.linalg.norm(
                     point_y.cartesian_coordinates - point_x.cartesian_coordinates
                 )
                 ** 2
             )
+            print(f"epsilon_0: {epsilon_0}")
             point_v = point_y
             point_yh = point_y
             z = (

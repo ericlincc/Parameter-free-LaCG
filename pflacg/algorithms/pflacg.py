@@ -1,15 +1,17 @@
 # codeing=utf-8
 """Contains code for parameter-free locally accelerated conditional gradient."""
 
-from copy import deepcopy
+
 import logging
 import time
 from multiprocessing import shared_memory, Value, Process, Lock
+
 import numpy as np
 
-from pflacg.experiments.objective_function import RegularizedObjectiveFunction
+from pflacg.experiments.objective_functions import RegularizedObjectiveFunction
 from pflacg.algorithms._abstract_algorithm import _AbstractAlgorithm
 from pflacg.algorithms._algorithms_utils import *
+from pflacg.experiments.feasible_regions import ConvexHull
 
 
 logging.basicConfig(
@@ -20,155 +22,233 @@ logging.basicConfig(
 LOGGER = logging.getLogger()
 
 
-GM_COEFF = 1.0 / 32.0
+WAIT_TIME_FOR_LOCK = 1
 
 
-# TODO: maybe switch to using Point instead of x.
-def compute_strong_FW_gap(x, active_set, objective_function, feasible_region):
-    grad = objective_function.evaluate_grad(x)
+# Helper functions
+
+
+def compute_strong_FW_gap(point_x, objective_function, feasible_region):
+    grad = objective_function.evaluate_grad(point_x.cartesian_coordinates)
     v = feasible_region.lp_oracle(grad)
-    a, indexMax = feasible_region.away_oracle(grad, active_set)
-    strong_FW_gap = np.dot(grad, a - v)
+    point_a, indexMax = feasible_region.away_oracle(grad, point_x)
+    strong_FW_gap = np.dot(grad, point_a.cartesian_coordinates - v)
     return strong_FW_gap
 
 
-def active_set_is_subset_of(active_set_1, active_set_2):
-    id_set_2 = set([id(vertex) for vertex in active_set_2])
-    for vertex in active_set_1:
-        if id(vertex) not in id_set_2:
-            return False
-    return True
+# Algorithms
 
 
 class ParameterFreeLaCG(_AbstractAlgorithm):
-    def __init__(self,
+    def __init__(
+        self,
         fw_variant="AFW",
         ratio=0.5,
-        async=False,
+        iter_sync=True,
     ):
         self.fw_variant = fw_variant
         self.ratio = 0.5
-        self.async = async
+        self.iter_sync = iter_sync
 
     def run(
         self,
         objective_function,
         feasible_region,
         exit_criterion,
-        initial_point,
-        initial_active_set,
-        initial_eta = 1.0,
+        point_initial,
     ):
 
         FAFW = FractionalAwayStepFW(fw_variant=self.fw_variant, ratio=self.ratio)
-        wACC = ParameterFreeAGD(ratio=self.ratio)
+        ACC = ParameterFreeAGD()
 
         # Initialization
-        strong_FW_gap_out = compute_strong_FW_gap(initial_point, initial_active_set, objective_function, feasible_region)
+        strong_FW_gap_out = compute_strong_FW_gap(
+            point_initial, objective_function, feasible_region
+        )
         iteration = 0
+        start_time = time.time()
         duration = 0.0
-        f_val = objective_function.evaluate(initial_point)
+        num_halvings = 0
+        f_val = objective_function.evaluate(point_initial.cartesian_coordinates)
         run_status = (
             iteration,
             duration,
             f_val,
+            0.0,  # TODO: Fix or remove ummy dual gap
             strong_FW_gap_out,
         )
         run_history = [run_status]
 
-        x_FAFW = initial_point
-        active_set_FAFW = initial_active_set
+        point_x_FAFW = point_initial
+        point_x_ACC = point_initial
+        active_set_ACC = point_initial.support
+        strong_FW_gap_FAFW = strong_FW_gap_out
+        strong_FW_gap_ACC = strong_FW_gap_out
+        eta = None
+        sigma = None
 
-        # Create a new shared memory block for wACC (and its lock)
-        # shared_ref looks like [returned parameters, yh]
-        dummy = np.zeros(shape=(objective_function.dim), dtype=np.float64)
-        shared_ret_x_buffer = shared_memory.SharedMemory(create=Trye, size=dummy.nbytes)
-        shared_ret_x = np.ndarray(a.shape, dtype=np.float64, buffer=shared_ret_x_buffer.buf)
-        global_eta = Value("d", initial_eta)
-        gloabl_sigma = Value("d", initial_eta)
-        wACC_output_lock = Lock()
+        # Create new shared memory buffers and buffer lock
+        ret_x_cartesian_coordinates_shm = shared_memory.SharedMemory(
+            create=True,
+            size=np.zeros(shape=objective_function.dim, dtype=np.float64).nbytes,
+        )
+        ret_x_cartesian_coordinates = np.ndarray(
+            shape=objective_function.dim,
+            dtype=np.float64,
+            buffer=ret_x_cartesian_coordinates_shm.buf,
+        )
+        ret_x_cartesian_coordinates[:] = point_x_ACC.cartesian_coordinates[:]
+        global_eta = Value("d", 0)
+        global_sigma = Value("d", 0)
+        ACC_paused_flag = Value("i", 0)
+        buffer_lock = Lock()
 
-        if not self.aysnc:
-            global_iter_count = Value("i", 0)
-            global_iter_count_lock = Lock()
+        global_iter = None
+        if self.iter_sync:
+            global_iter = Value("i", 0)
 
-
-        num_halvings = 0
+        ACC_restart_flag = True
+        ACC_process_started = False
         while not exit_criterion.has_met_exit_criterion(run_status):
             # Set halving strong Wolfe gap
             target_accuracy = strong_FW_gap_FAFW * self.ratio
+            num_halvings += 1
 
-            if wACC_restart_flag:
+            if ACC_restart_flag:
+                print("Restarting ACC")
+                ret_x_barycentric_coordinates_shm = shared_memory.SharedMemory(
+                    create=True,
+                    size=np.zeros(shape=len(active_set_ACC), dtype=np.float64).nbytes,
+                )
+                ret_x_barycentric_coordinates = np.ndarray(
+                    shape=len(active_set_ACC),
+                    dtype=np.float64,
+                    buffer=ret_x_barycentric_coordinates_shm.buf,
+                )
+                ret_x_barycentric_coordinates[:] = point_x_ACC.barycentric_coordinates[
+                    :
+                ]
 
-                dummy_lambdas = np.zero
-                active_set_wACC = active_set_FAFW
+                shared_buffers_dict = {
+                    "buffer_lock": buffer_lock,
+                    "global_iter": global_iter,
+                    "ACC_paused_flag": ACC_paused_flag,
+                    "global_eta": global_eta,
+                    "global_sigma": global_sigma,
+                    "ret_x_cartesian_coordinates": ret_x_cartesian_coordinates_shm.name,
+                    "ret_x_barycentric_coordinates": ret_x_barycentric_coordinates_shm.name,
+                }
 
-                dummy = np.zeros(shape=(len(active_set_FAFW)), dtype=np.float64)
-                shread_ret_lambdas_buffer = shared_memory.SharedMemory(create=Trye, size=dummy.nbytes)
-                shared_ret_lambdas = np.ndarray(a.shape, dtype=np.float64, buffer=shread_ret_lambdas_buffer.buf)
-
-                shared_memory_names = [shared_ret_y_buffer.name, shared_ret_lambdas.name, shared_ref]
-                wACC_process = Process(
-                    wACC.run,
+                print(f"Creating ACC process with set size {len(active_set_ACC)}")
+                convex_hull_ACC = ConvexHull(active_set_ACC)
+                ACC_process = Process(
+                    target=ACC.run,
                     args=(
-                        None
+                        objective_function,
+                        convex_hull_ACC,
+                        point_x_ACC,
+                        0.0,
+                        eta,
+                        sigma,
+                        shared_buffers_dict,
+                        iteration,
                     ),
                 )
-            else:
-                pass
-                # resume previous wACC process
+                if len(active_set_ACC) > 1:
+                    print("Starting ACC process")
+                    ACC_process.start()
+                    ACC_process_started = True
 
+            print("Running FAFW")
             # Run FAFW and wait for the output
-            x_FAFW, active_set_FAFW, lambdas_FAFW = FAFW.run(
+            point_x_FAFW = FAFW.run(
                 objective_function,
                 feasible_region,
-                x_FAFW,  # TODO: Change it to Point?
-                active_set_FAFW,
-                lambdas_FAFW,
-                global_iter_count=global_iter_count,  # TODO: Need to include a global count
+                point_x_FAFW,
+                target_accuracy=target_accuracy,
+                global_iter=global_iter,
             )
+            print("FAFW returned")
 
-            # TODO: Add a wait until iter_ACC > iter_global
+            # if iteration sync, need to wait for ACC to complete same #iterations
+            while self.iter_sync and ACC_process_started and ACC_process.is_alive():
+                with ACC_paused_flag.get_lock():
+                    _ACC_paused_flag = ACC_paused_flag.value
+                if _ACC_paused_flag == 1:
+                    # ACC has paused (the buffer is been updated since last ACC restart)
+                    break
+                else:
+                    print("Waiting for ACC")
+                    time.sleep(WAIT_TIME_FOR_LOCK)
 
+            print("Acquiring buffer")
             # retrieve the most recent output
-            wACC_output_lock.acquire()
-            x_wACC = np.copy(shared_ret_x)
-            lambdas_wACC = np.copy(shared_ret_lambdas)
-            wACC_output_lock.release()
-
+            buffer_lock.acquire()
+            point_x_ACC = Point(
+                np.copy(ret_x_cartesian_coordinates),
+                np.copy(ret_x_barycentric_coordinates),
+                active_set_ACC,
+            )
+            sigma = global_sigma.value
+            eta = global_eta.value
+            buffer_lock.release()
 
             # Compute Strong Wolfe gap (or dual gap)
-            strong_FW_gap_wACC = compute_strong_FW_gap(x_wACC, active_set_wACC, objective_function, feasible_region)
-            strong_FW_gap_FAFW = compute_strong_FW_gap(x_FAFW, active_set_FAFW, objective_function, feasible_region)
+            strong_FW_gap_ACC_prev = strong_FW_gap_ACC
+            strong_FW_gap_ACC = compute_strong_FW_gap(
+                point_x_ACC, objective_function, feasible_region
+            )
+            strong_FW_gap_FAFW = compute_strong_FW_gap(
+                point_x_FAFW, objective_function, feasible_region
+            )
+            assert (
+                strong_FW_gap_FAFW <= target_accuracy
+            )  # TODO: remove this after debugging.
 
-            if strong_FW_gap_wACC > strong_FW_gap_FAFW or not active_set_is_subset_of(active_set_wACC, active_set_FAFW): 
-                # Terminate wACC process and
+            if strong_FW_gap_FAFW <= min(strong_FW_gap_ACC, strong_FW_gap_ACC_prev / 2):
+                # Terminate ACC process and set restart flag
+                print("FAFW did better")
+                if ACC_process_started and ACC_process.is_alive():
+                    print("Terminating ACC")
+                    ACC_process.terminate()
+                    ACC_process.join()
+                    ACC_process_started = False
+                ret_x_barycentric_coordinates_shm.close()
+                ret_x_barycentric_coordinates_shm.unlink()
 
-                wACC_process.terminate()
-                wACC_process.join()
-                shread_ret_lambdas_buffer.close()
-                shread_ret_lambdas_buffer.unlink()
-                wACC_restart_flag = True
+                ACC_restart_flag = True
+                point_x_ACC = point_x_FAFW
+                active_set_ACC = point_x_ACC.support
 
                 # Set output points
-                x_out = x_FAFW
+                point_x_out = point_x_FAFW
                 strong_FW_gap_out = strong_FW_gap_FAFW
             else:
-                # Allow wACC to continue its execution
-                wACC_restart_flag = False
+                print("ACC did better")
+                print("Not terminating ACC")
+                # Allow ACC to continue its execution
+                ACC_restart_flag = False
+
+                # Couple FAFW by using the better point from ACC if condition satisfies
+                if len(point_x_ACC.support) <= len(point_x_FAFW.support):
+                    print("FAFW <- ACC")
+                    point_x_FAFW = point_x_ACC
 
                 # Set output points
-                x_out = x_wACC
-                strong_FW_gap_out = strong_FW_gap_wACC
+                point_x_out = point_x_ACC
+                strong_FW_gap_out = strong_FW_gap_ACC
 
             # Append output points
-            iteration = global_iter_count.value
+            print("Outputting")
+            with global_iter.get_lock():
+                iteration = global_iter.value
             duration = time.time() - start_time
-            f_val = objective_function.evaluate(x_out)
+            f_val = objective_function.evaluate(point_x_out.cartesian_coordinates)
             run_status = (
                 iteration,
                 duration,
                 f_val,
+                0.0,  # TODO: Fix or remove dummy dual gap
                 strong_FW_gap_out,
             )
             LOGGER.info(
@@ -179,196 +259,341 @@ class ParameterFreeLaCG(_AbstractAlgorithm):
             )
             run_history.append(run_status)
 
-        shared_ret_x_buffer.close()
-        shared_ret_x_buffer.unlink()
+        # Cleaning up buffers and process
+        ret_x_cartesian_coordinates_shm.close()
+        ret_x_cartesian_coordinates_shm.unlink()
+        if ACC_process_started and ACC_process.is_alive():
+            ACC_process.terminate()
+            ACC_process.join()
 
         return run_history
 
 
-
-
-
-class ParameterFreeAGD(_AbstractAlgorithm):
-    def __init__(self, ratio=0.5, **kwargs):
-        self.ratio = ratio
-
-    def compute_PGD_step(x, eta, objective_function, feasible_region):
-        # TODO
-        pass
+class ParameterFreeAGD:
+    def __init__(self, estimate_ratio=2):
+        self.estimate_ratio = estimate_ratio
 
     def run(
         self,
         objective_function,
         feasible_region,
-        initial_point,
-        initial_eta,
-        epsilon,
-        shared_ret_buffers_dict=None,
-        global_iter_count=global_iter_count,
-        **kwargs
+        point_initial,
+        epsilon=0.0,
+        initial_eta=None,
+        initial_sigma=None,
+        shared_buffers_dict=None,
+        last_restart_iter=0,
     ):
         """Run PF-ACC given an initial point and an active set/feasible region.
 
         Returns
         -------
-        
-        """
-        
 
-        # Initial shared buffers based on shared_ref_buffers_dict
+        """
+        dim = objective_function.dim
+
+        # Initial shared buffers based on shared_buffers_dict
+        if shared_buffers_dict:
+            global_eta = shared_buffers_dict["global_eta"]
+            global_sigma = shared_buffers_dict["global_sigma"]
+
+            ret_x_cartesian_coordinates_shm = shared_memory.SharedMemory(
+                name=shared_buffers_dict["ret_x_cartesian_coordinates"]
+            )
+            ret_x_cartesian_coordinates = np.ndarray(
+                shape=dim, dtype=np.float64, buffer=ret_x_cartesian_coordinates_shm.buf
+            )
+
+            ret_x_barycentric_coordinates_shm = shared_memory.SharedMemory(
+                name=shared_buffers_dict["ret_x_barycentric_coordinates"]
+            )
+            ret_x_barycentric_coordinates = np.ndarray(
+                shape=len(feasible_region.vertices),
+                dtype=np.float64,
+                buffer=ret_x_barycentric_coordinates_shm.buf,
+            )
+
+            global_iter = shared_buffers_dict["global_iter"]
+            ACC_paused_flag = shared_buffers_dict["ACC_paused_flag"]
+            buffer_lock = shared_buffers_dict["buffer_lock"]
 
         # Initializtion
-        x = initial_point
-        eta = global_eta.value
-        sigma = global_sigma.value
-        x_plus = compute_PGD_step(x, eta, objective_function, feasible_region)
-        norm_grad_mapping = np.linalg.norm(eta * (x_plus - x))
+        point_x = point_initial
+        _eta = 1
+        point_x_plus = argmin_quadratic_over_active_set(
+            quadratic_coefficient=_eta / 2.0,
+            linear_vector=(
+                objective_function.evaluate_grad(point_x.cartesian_coordinates)
+                - _eta * point_x.cartesian_coordinates
+            ),
+            active_set=feasible_region.vertices,
+            reference_point=point_x,
+            tolerance_type="gradient mapping",
+            tolerance=1 / (32 * _eta),
+        )
+        grad_mapping = (
+            point_x.cartesian_coordinates - point_x_plus.cartesian_coordinates
+        )
 
-        while np.isclose(norm_grad_mapping, epsilon) or norm_grad_mapping < epsilon:
-            epsilon_r = 0.5 * norm_grad_mapping
-            sigma_flag = False
-            while not sigma_flag:
-                _x, eta = self.ACC(objective_function, feasible_region, sigma, x, eta, 0.3 * epsilon_r)
+        # Guess a eta if initial_sigma is None
+        if initial_sigma is None:
+            x = point_x.cartesian_coordinates
+            x_plus = point_x_plus.cartesian_coordinates
+            print("norm: " + str(np.linalg.norm(x_plus - x)))
+            initial_sigma = (
+                2.0
+                * (
+                    objective_function.evaluate(x_plus)
+                    - objective_function.evaluate(x)
+                    - np.dot(objective_function.evaluate_grad(x), x_plus - x)
+                )
+                / (np.linalg.norm(x_plus - x) ** 2)
+            )
 
-                if sigma * np.linalg.norm(_x - x) <= 3 / 8 * epsilon_r:
-                    sigma_flag = True
-                    x = _x
+        # Set initial_eta to initial_sigma if initial_eta is None
+        if initial_eta is None:
+            initial_eta = initial_sigma
+        eta = initial_eta
+        sigma = initial_sigma
+        iteration = 0
+        print("initial_sigma: " + str(sigma))
+
+        while np.linalg.norm(grad_mapping) > epsilon:
+            point_x, grad_mapping, eta, sigma, _iteration = self.ACC_iter(
+                objective_function,
+                feasible_region,
+                point_initial=point_x,
+                eta=eta,
+                sigma=sigma,
+            )
+            iteration += _iteration
+
+            while shared_buffers_dict:
+                # if global_iter is None, then assume no iteration sync required.
+                if global_iter:
+                    with global_iter.get_lock():
+                        _global_iter = global_iter.value
                 else:
-                    sigma = sigma * 2.0  # TODO: need to update global_eta
+                    _global_iter = np.infty
 
-            x_plus = compute_PGD_step(x, eta, objective_function, feasible_region)
-            norm_grad_mapping = np.linalg.norm(eta * (x_plus - x))
+                if _global_iter >= last_restart_iter + iteration:
+                    # Update shared buffers
+                    buffer_lock.acquire()
+                    ret_x_cartesian_coordinates[:] = point_x.cartesian_coordinates[:]
+                    ret_x_barycentric_coordinates[:] = point_x.barycentric_coordinates[
+                        :
+                    ]
+                    global_eta.value = eta
+                    global_sigma.value = sigma
 
-            # TODO: Update shared buffers
+                    # Continue with the next ACC
+                    with ACC_paused_flag.get_lock():
+                        ACC_paused_flag.value = 0
+                    buffer_lock.release()
+                    break
+                else:
+                    # Pausing ACC's execution and sleep for some time.
+                    with ACC_paused_flag.get_lock():
+                        ACC_paused_flag.value = 1
+                    time.sleep(WAIT_TIME_FOR_LOCK)
 
-        return None  # TODO
+        return point_x, eta, sigma, iteration
 
-
-
-
-
-
-
-
-    def ACC(
+    def ACC_iter(
         self,
         objective_function,
         feasible_region,
+        point_initial,
+        eta,
         sigma,
-        initial_point,
-        initial_eta,
-        epsilon,
-        max_iteration=1e5,
     ):
-        """Inner ACC with exact projection."""
+        """Executes one call of ACC from Algorithm 4 in the paper.
 
-        # Initialization and compute eta_0
-        reg_objective_function = RegularizedObjectiveFunction(
-            objective_function=objective_function,
-            sigma=sigma,
-            reference_point=initial_point.cartesian_coordinates,
-        )
-        point_x = initial_point
+        Parameters
+        ----------
+        objective_function: Implemented _AbstractObjectiveFunction
+            Objective function of the problem instance.
+        feasible_region: Implemented _AbstractFeasibleRegion
+            Feasible region of the problem instance.
+        sigma: float
+            Most recent estimate of the regularization parameter.
+        point_initial: Point
+            Initial point to start executing this algorithm.
+        initial_eta: float
+            Initial estimation of smoothness.
+
+        Returns
+        -------
+        point_yh: Point
+        eta: float
+        sigma: float
+
+        """
+
+        # Initialization
+        point_x = point_initial
         a = 1
         A = 1
-        eta_0 = initial_eta
-        epsilon_M = a * epsilon / 8.0
+        eta_0 = eta
 
-        eta_flag = False
-        while not eta_flag:
-            eta_sigma = eta_0 + sigma
-            point_v = project_onto_active_set(
-                quadratic_coefficient=(sigma * A + eta) / 2.0,
-                linear_vector=z,
+        iteration = 0
+        sigma_flag = False
+
+        while not sigma_flag:
+
+            # Initialization
+            point_y = argmin_quadratic_over_active_set(
+                quadratic_coefficient=(eta_0 + sigma) / 2.0,
+                linear_vector=(
+                    objective_function.evaluate_grad(point_x.cartesian_coordinates)
+                    - (eta_0 + sigma) * point_x.cartesian_coordinates
+                ),
                 active_set=feasible_region.vertices,
-                barycentric_coordinates=point_x.barycentric_coordinates,
-                tolerance=epsilon_M,
-                tolerance_type="dual gap",
+                reference_point=point_x,
+                tolerance_type="gradient mapping",
+                tolerance=1 / (32 * (eta_0 + sigma)),
             )
-            point_yh = point_v
-            if self._check_eta_condition_1(
-                reg_objective_function,
-                point_x.cartesian_coordinates,
-                point_v.cartesian_coordinates,
-                eta_sigma
-            ):
-                eta_flag = True
+            epsilon_0 = ((eta_0 + sigma) / 32.0) * (
+                np.linalg.norm(
+                    point_y.cartesian_coordinates - point_x.cartesian_coordinates
+                )
+                ** 2
+            )
+            point_v = point_y
+            point_yh = point_y
+            z = (
+                eta_0 + sigma
+            ) * point_x.cartesian_coordinates - objective_function.evaluate_grad(
+                point_x.cartesian_coordinates
+            )
+            a = 1.0
+            A = 1.0
+
+            reg_objective_function = RegularizedObjectiveFunction(
+                objective_function=objective_function,
+                sigma=sigma,
+                reference_point=point_initial.cartesian_coordinates,
+            )
+
+            inner_complete_flag = False
+            while not inner_complete_flag:
+                theta = a / A
+                epsilon_l = theta * epsilon_0 / 4
+                epsilon_M = a * epsilon_0 / 4
+
+                eta, A, z, point_v, point_y, grad_mapping, _iteration = self.AGD_iter(
+                    objective_function,
+                    reg_objective_function,
+                    feasible_region,
+                    point_y,
+                    point_v,
+                    z,
+                    A,
+                    eta,
+                    sigma,
+                    epsilon_0,
+                    eta_0,
+                )
+                iteration += _iteration
+                print("gradient mapping: " + str(np.linalg.norm(grad_mapping)))
+                if (
+                    np.linalg.norm(grad_mapping) ** 2 / (eta + sigma)
+                    <= 9 * epsilon_0 / 4
+                ):
+                    inner_complete_flag = True
+                    print("inner_complete_flag")
+
+            if sigma * np.linalg.norm(
+                point_yh.cartesian_coordinates - point_initial.cartesian_coordinates
+            ) / np.sqrt(eta + sigma) <= np.sqrt(epsilon_0):
+                sigma_flag = True
             else:
-                eta_flag = False
-                eta_0 = eta_0 * 2.0
+                sigma = sigma / self.estimate_ratio
 
+        return point_yh, grad_mapping, eta, sigma, iteration
 
-        j = 1
-        eta = eta_0
-        while (j < max_iteration):
-            eta_flag = False
-            eta_sigma = eta + sigma
+    def AGD_iter(
+        self,
+        objective_function,
+        reg_objective_function,
+        feasible_region,
+        point_y_,
+        point_v_,
+        z_,
+        A_,
+        eta,
+        sigma,
+        epsilon_0,
+        eta_0,
+    ):
+        """Executing one AGD-Iter as described in Algo 1 of the paper."""
+        print("AGD_iter")
+        iteration = 0
+        eta_flag = False
 
-            _a = self.compute_a(A_=A, theta_max=np.sqrt(sigma / (2 * eta_sigma)))
-            _A = A + _a
+        while not eta_flag:
+            iteration += 1
 
-            _z, _point_v, _point_yh, _point_y = self.AGD_step(
+            theta_max = np.sqrt(sigma / (2 * (eta + sigma)))
+            a = self._compute_a(A_, theta_max)
+            A = A_ + a
+            theta = a / A
+            epsilon_l = theta * epsilon_0 / 4
+            epsilon_M = a * epsilon_0 / 4
+
+            point_x, z, point_v, point_yh, point_y = self.AGD_step(
                 reg_objective_function,
                 feasible_region,
-                point_y,
-                point_v,
-                z,
-                _a,
-                _A,
-                eta_sigma,
+                point_y_,
+                point_v_,
+                z_,
+                a,
+                A,
+                eta,
                 sigma,
                 epsilon_l,
                 epsilon_M,
                 eta_0,
             )
 
-            if self._check_eta_condition_1(
-                reg_objective_function,
+            eta_x_yh = self._check_eta_condition(
+                objective_function,
                 point_x.cartesian_coordinates,
                 point_yh.cartesian_coordinates,
-                eta_sigma,
-            ) and self._check_eta_condition_1(
-                reg_objective_function,
+                eta,
+            )
+            eta_yh_y = self._check_eta_condition(
+                objective_function,
                 point_yh.cartesian_coordinates,
                 point_y.cartesian_coordinates,
-                eta_sigma,
-            ):
+                eta,
+            )
+
+            if eta_x_yh and eta_yh_y:
                 eta_flag = True
             else:
-                eta_flag = False
+                eta = self.estimate_ratio * eta  # Maybe udpate a global eta too
 
-            if eta_flag:
-                A = _A
-                point_v = _point_v
-                point_yh = _point_yh
-                point_y = _point_y
-                z = _z
-                G_sigma = (eta + sigma) * (point_yh.cartesian_coordinates - point_y.cartesian_coordinates)
-
-                if np.linalg.norm(G_sigma) <= epsilon:
-                    return point_yh, eta
-            else:
-                eta = eta * 2.0
-                continue
-
-        return None
-
+        grad_mapping = (eta + sigma) * (
+            point_yh.cartesian_coordinates - point_y.cartesian_coordinates
+        )
+        return eta, A, z, point_v, point_y, grad_mapping, iteration
 
     def AGD_step(
-            self,
-            objective_function,
-            feasible_region,
-            point_y_,
-            point_v_,
-            z_,  # A numpy array
-            a,
-            A,
-            eta,
-            sigma,
-            epsilon_l,
-            epsilon_M,
-            eta_0,
-        ):
+        self,
+        objective_function,
+        feasible_region,
+        point_y_,
+        point_v_,
+        z_,  # A numpy array
+        a,
+        A,
+        eta,
+        sigma,
+        epsilon_l,
+        epsilon_M,
+        eta_0,
+    ):
         """Compute x_k, y_k and y_k^+ according to a smoothness estimate eta.
         Parameters
         ----------
@@ -397,47 +622,50 @@ class ParameterFreeAGD(_AbstractAlgorithm):
         point_yh: Point
         point_y: Point
         """
-
+        print("AGD_step")
         theta = a / A
         point_x = (1 / (1 + theta)) * point_y_ + (theta / (1 + theta)) * point_v_
 
-        z = z_ - a * objective_function.evaluate_grad(point_x.cartesian_coordinates) + sigma * a * point_x.cartesian_coordinates
-        point_v = project_onto_active_set(
+        z = (
+            z_
+            - a * objective_function.evaluate_grad(point_x.cartesian_coordinates)
+            + sigma * a * point_x.cartesian_coordinates
+        )
+        point_v = argmin_quadratic_over_active_set(
             quadratic_coefficient=(sigma * A + eta_0) / 2.0,
-            linear_vector=z,
+            linear_vector=(-z),
             active_set=feasible_region.vertices,
-            barycentric_coordinates=point_x.barycentric_coordinates,
-            tolerance=epsilon_M,
+            reference_point=point_x,
             tolerance_type="dual gap",
+            tolerance=epsilon_M,
         )
         point_yh = (1 - theta) * point_y_ + theta * point_v
-        point_y = project_onto_active_set(
+        point_y = argmin_quadratic_over_active_set(
             quadratic_coefficient=(eta + sigma) / 2.0,
-            linear_vector=objective_function.evaluate_grad(point_yh.cartesian_coordinates),
+            linear_vector=(
+                objective_function.evaluate_grad(point_yh.cartesian_coordinates)
+                - (eta + sigma) * point_yh.cartesian_coordinates
+            ),
             active_set=feasible_region.vertices,
-            barycentric_coordinates=point_yh.barycentric_coordinates,
-            tolerance=epsilon_l,
+            reference_point=point_yh,
             tolerance_type="dual gap",
+            tolerance=epsilon_l,
         )
-        return z, point_x, point_v, point_yh, point_y
-
-    def compute_eta_for_initial_point():
-        pass
+        return (
+            point_x,
+            z,
+            point_v,
+            point_yh,
+            point_y,
+        )
 
     @staticmethod
-    def _check_eta_condition_1(objective_function, x, y, eta):
+    def _check_eta_condition(objective_function, x, y, eta):
         """Check if f(y) <= f(x) + <nabla f (x), y - x> + eta / 2 * ||y - x||^2."""
         f_diff = objective_function.evaluate(y) - objective_function.evaluate(x)
         grad_x = objective_function.evaluate_grad(x)
         y_x = y - x
-        return (f_diff <= np.dot(grad_x, y_x) + eta / 2 * np.dot(y_x, y_x))
-
-    @staticmethod
-    def _check_eta_condition_2(objective_function, x, y, eta):
-        """Check if ||nabla f (y) - nabla f (x)|| <= eta * ||y - x||."""
-        grad_diff = objective_function.evaluate_grad(y) - objective_function.evaluate_grad(x)
-        y_x = y - x
-        return (np.dot(grad_diff, grad_diff) <= eta * np.linalg.norm(y_x))
+        return f_diff <= np.dot(grad_x, y_x) + eta / 2 * np.dot(y_x, y_x)
 
     @staticmethod
     def _compute_a(A_, theta_max):
@@ -447,49 +675,45 @@ class ParameterFreeAGD(_AbstractAlgorithm):
         return A_ * theta_max / (1 - theta_max)
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-class FractionalAwayStepFW(_AbstractAlgorithm):
-    def __init__(self, fw_variant = "AFW", ratio=0.5, **kwargs):
+class FractionalAwayStepFW:
+    def __init__(self, fw_variant="AFW", ratio=0.5, **kwargs):
         assert (
-            fw_variant == "AFW"
-            or fw_variant == "PFW"
+            fw_variant == "AFW" or fw_variant == "PFW"
         ), "Wrong variant supplied to the adaptive algorithm"
         self.ratio = 0.5
         self.fw_variant = fw_variant
         pass
 
-    #Use AFW algorithm to halve the strong Wolfe gap until it is below a given tolerance.
+    # Use AFW algorithm to halve the strong Wolfe gap until it is below a given tolerance.
     def run(
         self,
         objective_function,
         feasible_region,
-        point_initial
+        point_initial,
+        target_accuracy=None,
+        global_iter=None,
     ):
-        grad = objective_function.evaluate_grad(point_initial.cartesian_coordinates)
-        v = feasible_region.lp_oracle(grad)
-        point_a, indexMax = feasible_region.away_oracle(grad, point_initial)
-        # a, indexMax = feasible_region.away_oracle(grad, active_set)
-        strong_FW_gap = np.dot(grad, point_a.cartesian_coordinates - v)
-        target_accuracy = strong_FW_gap*self.ratio
+        if target_accuracy is None:
+            grad = objective_function.evaluate_grad(point_initial.cartesian_coordinates)
+            v = feasible_region.lp_oracle(grad)
+            point_a, indexMax = feasible_region.away_oracle(grad, point_initial)
+            # a, indexMax = feasible_region.away_oracle(grad, active_set)
+            strong_FW_gap = np.dot(grad, point_a.cartesian_coordinates - v)
+            target_accuracy = strong_FW_gap * self.ratio
+
         from pflacg.algorithms.fw_variants import FrankWolfe
+
         fw_algorithm = FrankWolfe(self.fw_variant, "line_search")
+
         from pflacg.algorithms._algorithms_utils import ExitCriterion
+
         exit_criterion = ExitCriterion("SWG", target_accuracy)
-        results = fw_algorithm.run(objective_function, feasible_region, exit_criterion, point_initial, save_and_output_results = False)
-        return results
+        point_out = fw_algorithm.run(
+            objective_function,
+            feasible_region,
+            exit_criterion,
+            point_initial,
+            save_and_output_results=False,
+            global_iter=global_iter,
+        )
+        return point_out

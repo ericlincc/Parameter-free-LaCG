@@ -27,11 +27,15 @@ class _AbstractFeasibleRegion(ABC):
 
     @property
     def initial_point(self):
-        raise NotImplementedError("Initial point has not been set for this feasible region!")
+        raise NotImplementedError(
+            "Initial point has not been set for this feasible region!"
+        )
 
     @property
     def initial_active_set(self):
-        raise NotImplementedError("Initial active set has not been set for this feasible region!")
+        raise NotImplementedError(
+            "Initial active set has not been set for this feasible region!"
+        )
 
     @abstractmethod
     def lp_oracle(self, d):
@@ -42,7 +46,9 @@ class _AbstractFeasibleRegion(ABC):
         pass
 
     def projection(self, x, accuracy):
-        raise NotImplementedError("Projection has not been implemented for this feasible region!")
+        raise NotImplementedError(
+            "Projection has not been implemented for this feasible region!"
+        )
 
 
 class ConvexHull(_AbstractFeasibleRegion):
@@ -54,14 +60,15 @@ class ConvexHull(_AbstractFeasibleRegion):
     def lp_oracle(self, d):
         return max_vertex(-d, self.vertices)
 
-    def away_oracle(self, d, active_vertices):
-        return max_vertex(d, active_vertices)
-    
+    def away_oracle(self, d, point):
+        return max_vertex(d, point)
+
     def away_oracle_old(self, d, active_vertices):
         return max_vertex_old(d, active_vertices)
 
     def projection(self, x, accuracy):
         pass
+
 
 class BirkhoffPolytope(_AbstractFeasibleRegion):
     def __init__(self, dim):
@@ -91,6 +98,7 @@ class BirkhoffPolytope(_AbstractFeasibleRegion):
     def away_oracle_old(self, grad, active_vertex):
         return max_vertex_old(grad, active_vertex)
 
+
 class ProbabilitySimplexPolytope(_AbstractFeasibleRegion):
     def __init__(self, dim):
         self.dim = dim
@@ -119,12 +127,11 @@ class ProbabilitySimplexPolytope(_AbstractFeasibleRegion):
     #        v[index_max] = 1.0
     #        return v, index_max
 
-    def away_oracle(self, grad, active_vertex):
-        return max_vertex(grad, active_vertex)
-    
+    def away_oracle(self, grad, point):
+        return max_vertex(grad, point)
+
     def away_oracle_old(self, grad, active_vertex):
         return max_vertex_old(grad, active_vertex)
-
 
     def projection(self, x):
         (n,) = x.shape  # will raise ValueError if v is not 1-D
@@ -161,7 +168,7 @@ class L1UnitBallPolytope(_AbstractFeasibleRegion):
 
     def away_oracle(self, grad, active_vertex):
         return max_vertex(grad, active_vertex)
-    
+
     def away_oracle_old(self, grad, active_vertex):
         return max_vertex_old(grad, active_vertex)
 
@@ -204,9 +211,9 @@ class L2UnitBallPolytope(_AbstractFeasibleRegion):
 
     def away_oracle(self, grad, active_vertex):
         return max_vertex(grad, active_vertex)
-    
+
     def away_oracle_old(self, grad, active_vertex):
         return max_vertex_old(grad, active_vertex)
-    
+
     def projection(self, x):
         return x / np.linalg.norm(x)

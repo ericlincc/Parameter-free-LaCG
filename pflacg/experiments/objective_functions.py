@@ -211,9 +211,9 @@ class RegularizedObjectiveFunction(_AbstractObjectiveFunction):
         pass
 
     def evaluate(self, x):
-        _x = x - self.reference_point
-        return self.objective_function.evaluate(x) + self.sigma / 2.0 * np.dot(_x, _x)
+        x_diff = x - self.reference_point
+        return self.objective_function.evaluate(x) + self.sigma * np.linalg.norm(x_diff) ** 2 / 2
 
     def evaluate_grad(self, x):
-        _x = x - self.reference_point
-        return self.objective_function.evaluate_grad(x) + self.sigma * _x
+        x_diff = x - self.reference_point
+        return self.objective_function.evaluate_grad(x) + self.sigma * x_diff

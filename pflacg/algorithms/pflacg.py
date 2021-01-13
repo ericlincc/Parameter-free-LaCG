@@ -498,11 +498,11 @@ class ParameterFreeAGD:
                 epsilon_l = theta * epsilon_0 / 4
                 epsilon_M = a * epsilon_0 / 4
 
-                eta, A, z, point_v, point_y, grad_mapping, _iteration = self.AGD_iter(
+                eta, A, z, point_v, point_yh, point_y, grad_mapping, _iteration = self.AGD_iter(
                     objective_function,
                     reg_objective_function,
                     feasible_region,
-                    point_y,
+                    point_yh,
                     point_v,
                     z,
                     A,
@@ -534,10 +534,10 @@ class ParameterFreeAGD:
         objective_function,
         reg_objective_function,
         feasible_region,
-        point_y_,
-        point_v_,
-        z_,
-        A_,
+        point_y,
+        point_v,
+        z,
+        A,
         eta,
         sigma,
         epsilon_0,
@@ -552,8 +552,8 @@ class ParameterFreeAGD:
             iteration += 1
 
             theta_max = np.sqrt(sigma / (2 * (eta + sigma)))
-            a = self._compute_a(A_, theta_max)
-            A = A_ + a
+            a = self._compute_a(A, theta_max)
+            A = A + a
             theta = a / A
             epsilon_l = theta * epsilon_0 / 4
             epsilon_M = a * epsilon_0 / 4
@@ -561,9 +561,9 @@ class ParameterFreeAGD:
             point_x, z, point_v, point_yh, point_y = self.AGD_step(
                 reg_objective_function,
                 feasible_region,
-                point_y_,
-                point_v_,
-                z_,
+                point_y,
+                point_v,
+                z,
                 a,
                 A,
                 eta,
@@ -594,11 +594,11 @@ class ParameterFreeAGD:
         grad_mapping = (eta + sigma) * (
             point_yh.cartesian_coordinates - point_y.cartesian_coordinates
         )
-        return eta, A, z, point_v, point_y, grad_mapping, iteration
+        return eta, A, z, point_v, point_yh, point_y, grad_mapping, iteration
 
     def AGD_step(
         self,
-        objective_function,
+        reg_objective_function,
         feasible_region,
         point_y_,
         point_v_,
@@ -645,11 +645,11 @@ class ParameterFreeAGD:
 
         z = (
             z_
-            - a * objective_function.evaluate_grad(point_x.cartesian_coordinates)
+            - a * reg_objective_function.evaluate_grad(point_x.cartesian_coordinates)
             + sigma * a * point_x.cartesian_coordinates
         )
         point_v = argmin_quadratic_over_active_set(
-            quadratic_coefficient=(sigma * A + eta_0) / 2.0,
+            quadratic_coefficient=(sigma * A + eta_0) / 2,
             linear_vector=(-z),
             active_set=feasible_region.vertices,
             reference_point=point_x,
@@ -658,9 +658,9 @@ class ParameterFreeAGD:
         )
         point_yh = (1 - theta) * point_y_ + theta * point_v
         point_y = argmin_quadratic_over_active_set(
-            quadratic_coefficient=(eta + sigma) / 2.0,
+            quadratic_coefficient=(eta + sigma) / 2,
             linear_vector=(
-                objective_function.evaluate_grad(point_yh.cartesian_coordinates)
+                reg_objective_function.evaluate_grad(point_yh.cartesian_coordinates)
                 - (eta + sigma) * point_yh.cartesian_coordinates
             ),
             active_set=feasible_region.vertices,
@@ -668,6 +668,8 @@ class ParameterFreeAGD:
             tolerance_type="dual gap",
             tolerance=epsilon_l,
         )
+        print("function_val at yh: " + str(reg_objective_function.evaluate(point_yh.cartesian_coordinates)))
+        print("function_val at y: " + str(reg_objective_function.evaluate(point_y.cartesian_coordinates)))
         return (
             point_x,
             z,
@@ -676,6 +678,7 @@ class ParameterFreeAGD:
             point_y,
         )
 
+    # TODO: change to point_x, point_y
     @staticmethod
     def _check_eta_condition(objective_function, x, y, eta):
         """Check if f(y) <= f(x) + <nabla f (x), y - x> + eta / 2 * ||y - x||^2."""

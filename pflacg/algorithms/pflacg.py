@@ -167,7 +167,9 @@ class ParameterFreeLaCG(_AbstractAlgorithm):
                 target_accuracy=target_accuracy,
                 global_iter=global_iter,
             )
-            print("FAFW returned")
+            with global_iter.get_lock():
+                _global_iter = global_iter.value
+            print(f"FAFW returned at global_iter = {_global_iter}")
 
             # if iteration sync, need to wait for ACC to complete same #iterations
             while self.iter_sync and ACC_process_started and ACC_process.is_alive():
@@ -213,6 +215,8 @@ class ParameterFreeLaCG(_AbstractAlgorithm):
                     ACC_process.terminate()
                     ACC_process.join()
                 ACC_process_started = False
+                with ACC_paused_flag.get_lock():
+                    ACC_paused_flag.value = 0
                 ret_x_barycentric_coordinates_shm.close()
                 ret_x_barycentric_coordinates_shm.unlink()
 
@@ -290,6 +294,7 @@ class ParameterFreeAGD:
         -------
 
         """
+        LOGGER.info(f"ACC process started at last_restart_iter = {last_restart_iter}")
         if len(feasible_region.vertices) <= 1:
             return point_initial, initial_eta, initial_sigma, 0
 
@@ -339,7 +344,6 @@ class ParameterFreeAGD:
         if initial_sigma is None:
             x = point_x.cartesian_coordinates
             y = point_y.cartesian_coordinates
-            print("norm: " + str(np.linalg.norm(y - x)))
             initial_sigma = (
                 2.0
                 * (
@@ -383,6 +387,7 @@ class ParameterFreeAGD:
             )
             iteration += _iteration
 
+            LOGGER.info("About to update buffer.")
             while shared_buffers_dict:
                 # if global_iter is None, then assume no iteration sync required.
                 if global_iter:
@@ -445,7 +450,7 @@ class ParameterFreeAGD:
 
         """
 
-        print("ACC_iter")
+        LOGGER.info("ACC_iter starts")
         # Initialization
         point_x = point_initial
         a = 1
@@ -467,7 +472,7 @@ class ParameterFreeAGD:
                 active_set=feasible_region.vertices,
                 reference_point=point_x,
                 tolerance_type="gradient mapping",
-                tolerance=1 / (ACCURACY * (eta_0 + sigma)),
+                tolerance=(eta_0 + sigma) / ACCURACY,
             )
             epsilon_0 = ((eta_0 + sigma) / ACCURACY) * (
                 np.linalg.norm(
@@ -475,7 +480,6 @@ class ParameterFreeAGD:
                 )
                 ** 2
             )
-            print(f"epsilon_0: {epsilon_0}")
             point_v = point_y
             point_yh = point_y
             z = (
@@ -512,13 +516,11 @@ class ParameterFreeAGD:
                     eta_0,
                 )
                 iteration += _iteration
-                print("gradient mapping: " + str(np.linalg.norm(grad_mapping)))
                 if (
                     np.linalg.norm(grad_mapping) ** 2 / (eta + sigma)
                     <= 9 * epsilon_0 / 4
                 ):
                     inner_complete_flag = True
-                    print("inner_complete_flag")
 
             if sigma * np.linalg.norm(
                 point_yh.cartesian_coordinates - point_initial.cartesian_coordinates
@@ -526,7 +528,9 @@ class ParameterFreeAGD:
                 sigma_flag = True
             else:
                 sigma = sigma / self.estimate_ratio
+                LOGGER.info(f"Sigma halved: sigma = {sigma}")
 
+        LOGGER.info("ACC_iter returns")
         return point_yh, grad_mapping, eta, sigma, iteration
 
     def AGD_iter(
@@ -534,17 +538,17 @@ class ParameterFreeAGD:
         objective_function,
         reg_objective_function,
         feasible_region,
-        point_y,
-        point_v,
-        z,
-        A,
+        point_y_,
+        point_v_,
+        z_,
+        A_,
         eta,
         sigma,
         epsilon_0,
         eta_0,
     ):
         """Executing one AGD-Iter as described in Algo 1 of the paper."""
-        print("AGD_iter")
+        LOGGER.info("AGD_iter_starts")
         iteration = 0
         eta_flag = False
 
@@ -552,8 +556,8 @@ class ParameterFreeAGD:
             iteration += 1
 
             theta_max = np.sqrt(sigma / (2 * (eta + sigma)))
-            a = self._compute_a(A, theta_max)
-            A = A + a
+            a = self._compute_a(A_, theta_max)
+            A = A_ + a
             theta = a / A
             epsilon_l = theta * epsilon_0 / 4
             epsilon_M = a * epsilon_0 / 4
@@ -561,9 +565,9 @@ class ParameterFreeAGD:
             point_x, z, point_v, point_yh, point_y = self.AGD_step(
                 reg_objective_function,
                 feasible_region,
-                point_y,
-                point_v,
-                z,
+                point_y_,
+                point_v_,
+                z_,
                 a,
                 A,
                 eta,
@@ -590,6 +594,7 @@ class ParameterFreeAGD:
                 eta_flag = True
             else:
                 eta = self.estimate_ratio * eta  # Maybe udpate a global eta too
+                LOGGER.info(f"Eta doubled: eta = {eta}")
 
         grad_mapping = (eta + sigma) * (
             point_yh.cartesian_coordinates - point_y.cartesian_coordinates
@@ -639,7 +644,6 @@ class ParameterFreeAGD:
         point_yh: Point
         point_y: Point
         """
-        print("AGD_step")
         theta = a / A
         point_x = (1 / (1 + theta)) * point_y_ + (theta / (1 + theta)) * point_v_
 
@@ -666,10 +670,8 @@ class ParameterFreeAGD:
             active_set=feasible_region.vertices,
             reference_point=point_yh,
             tolerance_type="dual gap",
-            tolerance=epsilon_l,
+            tolerance=1e-10,
         )
-        print("function_val at yh: " + str(reg_objective_function.evaluate(point_yh.cartesian_coordinates)))
-        print("function_val at y: " + str(reg_objective_function.evaluate(point_y.cartesian_coordinates)))
         return (
             point_x,
             z,

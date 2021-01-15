@@ -430,7 +430,7 @@ def FW_away_lazy(
                 )
                 if flag == False:
                     new_barycentric_coordinates = list(
-                        np.zeros(len(point_x.barycentric_coordinates))
+                        point_x.barycentric_coordinates
                     )
                     new_barycentric_coordinates.append(0.0)
                     point_x = Point(

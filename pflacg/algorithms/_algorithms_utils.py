@@ -161,8 +161,8 @@ class ExitCriterion:
         criterion_type,
         criterion_value,
         criterion_reference=0.0,
-        max_time=1800,
-        max_iter=1000,
+        max_time=np.inf,
+        max_iter=np.inf,
     ):
         """
         Parameters

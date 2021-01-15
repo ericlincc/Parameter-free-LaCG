@@ -140,24 +140,24 @@ class ParameterFreeLaCG(_AbstractAlgorithm):
 
                 print(f"Creating ACC process with set size {len(active_set_ACC)}")
                 convex_hull_ACC = ConvexHull(active_set_ACC)
-                ACC_process = Process(
-                    target=ACC.run,
-                    args=(
-                        objective_function,
-                        convex_hull_ACC,
-                        point_x_ACC,
-                        0.0,
-                        eta,
-                        sigma,
-                        shared_buffers_dict,
-                        iteration,
-                    ),
-                )
-                if len(active_set_ACC) > 1:
-                    print("Starting ACC process")
-                    ACC_process.start()
-                    ACC_process_started = True
-
+                # ACC_process = Process(
+                #     target=ACC.run,
+                #     args=(
+                #         objective_function,
+                #         convex_hull_ACC,
+                #         point_x_ACC,
+                #         0.0,
+                #         eta,
+                #         sigma,
+                #         shared_buffers_dict,
+                #         iteration,
+                #     ),
+                # )
+                # if len(active_set_ACC) > 1:
+                #     print("Starting ACC process")
+                #     ACC_process.start()
+                #     ACC_process_started = True
+                
             print("Running FAFW")
             # Run FAFW and wait for the output
             point_x_FAFW = FAFW.run(
@@ -171,29 +171,33 @@ class ParameterFreeLaCG(_AbstractAlgorithm):
                 _global_iter = global_iter.value
             print(f"FAFW returned at global_iter = {_global_iter}")
 
-            # if iteration sync, need to wait for ACC to complete same #iterations
-            while self.iter_sync and ACC_process_started and ACC_process.is_alive():
-                with ACC_paused_flag.get_lock():
-                    _ACC_paused_flag = ACC_paused_flag.value
-                if _ACC_paused_flag == 1:
-                    # ACC has paused (the buffer is been updated since last ACC restart)
-                    break
-                else:
-                    print("Waiting for ACC")
-                    time.sleep(WAIT_TIME_FOR_LOCK)
 
-            print("Acquiring buffer")
-            # retrieve the most recent output
-            buffer_lock.acquire()
-            point_x_ACC = Point(
-                np.copy(ret_x_cartesian_coordinates),
-                np.copy(ret_x_barycentric_coordinates),
-                active_set_ACC,
-            )
-            if ACC_process_started:
-                sigma = global_sigma.value
-                eta = global_eta.value
-            buffer_lock.release()
+
+            # # if iteration sync, need to wait for ACC to complete same #iterations
+            # while self.iter_sync and ACC_process_started and ACC_process.is_alive():
+            #     with ACC_paused_flag.get_lock():
+            #         _ACC_paused_flag = ACC_paused_flag.value
+            #     if _ACC_paused_flag == 1:
+            #         # ACC has paused (the buffer is been updated since last ACC restart)
+            #         break
+            #     else:
+            #         print("Waiting for ACC")
+            #         time.sleep(WAIT_TIME_FOR_LOCK)
+
+            # print("Acquiring buffer")
+            # # retrieve the most recent output
+            # buffer_lock.acquire()
+            # point_x_ACC = Point(
+            #     np.copy(ret_x_cartesian_coordinates),
+            #     np.copy(ret_x_barycentric_coordinates),
+            #     active_set_ACC,
+            # )
+            # if ACC_process_started:
+            #     sigma = global_sigma.value
+            #     eta = global_eta.value
+            # buffer_lock.release()
+            
+            
 
             # Compute Strong Wolfe gap (or dual gap)
             strong_FW_gap_ACC_prev = strong_FW_gap_ACC
@@ -206,7 +210,7 @@ class ParameterFreeLaCG(_AbstractAlgorithm):
             assert (
                 strong_FW_gap_FAFW <= target_accuracy
             )  # TODO: remove this after debugging.
-
+            
             if strong_FW_gap_FAFW <= min(strong_FW_gap_ACC, strong_FW_gap_ACC_prev / 2):
                 # Terminate ACC process and set restart flag
                 print("FAFW did better")
@@ -723,6 +727,8 @@ class FractionalAwayStepFW:
             strong_FW_gap = np.dot(grad, point_a.cartesian_coordinates - v)
             target_accuracy = strong_FW_gap * self.ratio
 
+        # print("Before: ", strong_FW_gap)
+
         from pflacg.algorithms.fw_variants import FrankWolfe
 
         fw_algorithm = FrankWolfe(self.fw_variant, "line_search")
@@ -738,4 +744,8 @@ class FractionalAwayStepFW:
             save_and_output_results=False,
             global_iter=global_iter,
         )
+        
+        
+        # print("After: ", compute_strong_FW_gap(point_out, objective_function, feasible_region))
+        # print("Sufficient decrease?  ", compute_strong_FW_gap(point_out, objective_function, feasible_region) < target_accuracy)
         return point_out

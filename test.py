@@ -23,10 +23,10 @@ feasible_region = ProbabilitySimplexPolytope(dimension)
 # feasible_region = L1UnitBallPolytope(dimension)
 # feasible_region = L2UnitBallPolytope(dimension)
 
-FW_algorithm_new = FrankWolfe("AFW", "line_search")
+FW_algorithm_new = FrankWolfe("lazy", "line_search")
 results_new = FW_algorithm_new.run(function, feasible_region, test_exit_criterion)
 
-FW_algorithm = FrankWolfe_backup("AFW", "line_search")
+FW_algorithm = FrankWolfe_backup("lazy", "line_search")
 results_old = FW_algorithm.run(function, feasible_region, test_exit_criterion)
 
 dual_gap_new = [dual_gap for iteration, duration, f_val, dual_gap, strong_wolfe_gap in results_new]

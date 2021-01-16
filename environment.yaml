@@ -142,4 +142,6 @@ dependencies:
   - zlib=1.2.11=h7b6447c_3
   - zstd=1.4.4=h0b5b093_3
   - pip:
+    - --index-url https://pypi.gurobi.com gurobipy
     - gurobipy==9.1.1
+

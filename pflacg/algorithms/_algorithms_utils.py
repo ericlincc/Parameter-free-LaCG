@@ -38,6 +38,10 @@ class Point:
 
         if not len(barycentric_coordinates) == len(support):
             raise ValueError("Lengths of barycentric_coordinates and support not equal")
+        if not isinstance(barycentric_coordinates, tuple):
+            barycentric_coordinates = tuple(barycentric_coordinates)
+        if not isinstance(support, tuple):
+            support = tuple(support)
 
         self.cartesian_coordinates = cartesian_coordinates
         self.barycentric_coordinates = barycentric_coordinates
@@ -601,6 +605,7 @@ def accelerated_projected_gradient_descent(
         if time.time() - time_ref > time_limit or it_count > max_iteration:
             break
         gap_values.append(FWGap)
+        LOGGER.info(f"FWGap = {FWGap}")
     w = np.zeros(len(active_set[0]))
     for i in range(len(active_set)):
         w += x[-1][i] * active_set[i]

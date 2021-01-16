@@ -113,10 +113,11 @@ class ParameterFreeLaCG(_AbstractAlgorithm):
         while not exit_criterion.has_met_exit_criterion(run_status):
             # Set halving strong Wolfe gap
             target_accuracy = strong_FW_gap_FAFW * self.ratio
+            LOGGER.info(f"SWG target accuracy = {target_accuracy}")
             num_halvings += 1
 
             if ACC_restart_flag:
-                print("Restarting ACC")
+                LOGGER.info("Restarting ACC")
                 ret_x_barycentric_coordinates_shm = shared_memory.SharedMemory(
                     create=True,
                     size=np.zeros(shape=len(active_set_ACC), dtype=np.float64).nbytes,
@@ -126,7 +127,9 @@ class ParameterFreeLaCG(_AbstractAlgorithm):
                     dtype=np.float64,
                     buffer=ret_x_barycentric_coordinates_shm.buf,
                 )
-                ret_x_barycentric_coordinates[:] = point_x_ACC.barycentric_coordinates[:]
+                ret_x_barycentric_coordinates[:] = point_x_ACC.barycentric_coordinates[
+                    :
+                ]
 
                 shared_buffers_dict = {
                     "buffer_lock": buffer_lock,
@@ -138,7 +141,7 @@ class ParameterFreeLaCG(_AbstractAlgorithm):
                     "ret_x_barycentric_coordinates": ret_x_barycentric_coordinates_shm.name,
                 }
 
-                print(f"Creating ACC process with set size {len(active_set_ACC)}")
+                LOGGER.info(f"Creating ACC process with set size {len(active_set_ACC)}")
                 convex_hull_ACC = ConvexHull(active_set_ACC)
                 ACC_process = Process(
                     target=ACC.run,
@@ -154,11 +157,11 @@ class ParameterFreeLaCG(_AbstractAlgorithm):
                     ),
                 )
                 if len(active_set_ACC) > 1:
-                    print("Starting ACC process")
+                    LOGGER.info("Starting ACC process")
                     ACC_process.start()
                     ACC_process_started = True
 
-            print("Running FAFW")
+            LOGGER.info("Running FAFW")
             # Run FAFW and wait for the output
             point_x_FAFW = FAFW.run(
                 objective_function,
@@ -169,7 +172,7 @@ class ParameterFreeLaCG(_AbstractAlgorithm):
             )
             with global_iter.get_lock():
                 _global_iter = global_iter.value
-            print(f"FAFW returned at global_iter = {_global_iter}")
+            LOGGER.info(f"FAFW returned at global_iter = {_global_iter}")
 
             # if iteration sync, need to wait for ACC to complete same #iterations
             while self.iter_sync and ACC_process_started and ACC_process.is_alive():
@@ -179,10 +182,10 @@ class ParameterFreeLaCG(_AbstractAlgorithm):
                     # ACC has paused (the buffer is been updated since last ACC restart)
                     break
                 else:
-                    print("Waiting for ACC")
+                    LOGGER.info("Waiting for ACC")
                     time.sleep(WAIT_TIME_FOR_LOCK)
 
-            print("Acquiring buffer")
+            LOGGER.info("Acquiring buffer")
             # retrieve the most recent output
             buffer_lock.acquire()
             point_x_ACC = Point(
@@ -209,9 +212,9 @@ class ParameterFreeLaCG(_AbstractAlgorithm):
 
             if strong_FW_gap_FAFW <= min(strong_FW_gap_ACC, strong_FW_gap_ACC_prev / 2):
                 # Terminate ACC process and set restart flag
-                print("FAFW did better")
+                LOGGER.info("FAFW did better")
                 if ACC_process_started and ACC_process.is_alive():
-                    print("Terminating ACC")
+                    LOGGER.info("Terminating ACC")
                     ACC_process.terminate()
                     ACC_process.join()
                 ACC_process_started = False
@@ -228,22 +231,23 @@ class ParameterFreeLaCG(_AbstractAlgorithm):
                 point_x_out = point_x_FAFW
                 strong_FW_gap_out = strong_FW_gap_FAFW
             else:
-                print("ACC did better")
-                print("Not terminating ACC")
+                LOGGER.info("ACC did better")
+                LOGGER.info("Not terminating ACC")
                 # Allow ACC to continue its execution
                 ACC_restart_flag = False
 
                 # Couple FAFW by using the better point from ACC if condition satisfies
                 if len(point_x_ACC.support) <= len(point_x_FAFW.support):
-                    print("FAFW <- ACC")
+                    LOGGER.info("FAFW <- ACC")
                     point_x_FAFW = point_x_ACC
+                    strong_FW_gap_FAFW = strong_FW_gap_ACC
 
                 # Set output points
                 point_x_out = point_x_ACC
                 strong_FW_gap_out = strong_FW_gap_ACC
 
             # Append output points
-            print("Outputting")
+            LOGGER.info("Outputting")
             with global_iter.get_lock():
                 iteration = global_iter.value
             duration = time.time() - start_time
@@ -256,7 +260,7 @@ class ParameterFreeLaCG(_AbstractAlgorithm):
                 strong_FW_gap_out,
             )
             LOGGER.info(
-                "Running " + str(self.fw_variant) + ": "
+                "Running PFLaCG: "
                 "iteration = {1}, duration = {2:.{0}f}, f_val = {3:.{0}f}, dual_gap = {4:.{0}f}".format(
                     DISPLAY_DECIMALS, *run_status
                 )
@@ -330,18 +334,18 @@ class ParameterFreeAGD:
         if np.allclose(point_x.cartesian_coordinates, point_x.support[0]):
             point_y = Point(
                 point_x.support[1],
-                [1. if i == 1 else 0. for i in range(len(point_x.support))],
+                [1.0 if i == 1 else 0.0 for i in range(len(point_x.support))],
                 point_x.support,
             )
         else:
             point_y = Point(
                 point_x.support[0],
-                [1. if i == 0 else 0. for i in range(len(point_x.support))],
+                [1.0 if i == 0 else 0.0 for i in range(len(point_x.support))],
                 point_x.support,
             )
 
         # Guess a eta if initial_sigma is None
-        if initial_sigma is None:
+        if initial_sigma is None or initial_sigma == 0.0:
             x = point_x.cartesian_coordinates
             y = point_y.cartesian_coordinates
             initial_sigma = (
@@ -355,12 +359,13 @@ class ParameterFreeAGD:
             )
 
         # Set initial_eta to initial_sigma if initial_eta is None
-        if initial_eta is None:
+        if initial_eta is None or initial_eta == 0.0:
             initial_eta = initial_sigma
         eta = initial_eta
         sigma = initial_sigma
+        LOGGER.info(f"initial_sigma = {initial_sigma}")
+        LOGGER.info(f"initial_eta = {initial_eta}")
         iteration = 0
-        print("initial_sigma: " + str(sigma))
 
         point_x_plus = argmin_quadratic_over_active_set(
             quadratic_coefficient=eta / 2.0,
@@ -371,7 +376,7 @@ class ParameterFreeAGD:
             active_set=feasible_region.vertices,
             reference_point=point_x,
             tolerance_type="gradient mapping",
-            tolerance=1 / (ACCURACY * eta),
+            tolerance=eta / ACCURACY,
         )
         grad_mapping = (
             point_x.cartesian_coordinates - point_x_plus.cartesian_coordinates
@@ -388,6 +393,11 @@ class ParameterFreeAGD:
             iteration += _iteration
 
             LOGGER.info("About to update buffer.")
+            if shared_buffers_dict:
+                buffer_lock.acquire()
+                global_eta.value = eta
+                global_sigma.value = sigma
+                buffer_lock.release()
             while shared_buffers_dict:
                 # if global_iter is None, then assume no iteration sync required.
                 if global_iter:
@@ -403,8 +413,6 @@ class ParameterFreeAGD:
                     ret_x_barycentric_coordinates[:] = point_x.barycentric_coordinates[
                         :
                     ]
-                    global_eta.value = eta
-                    global_sigma.value = sigma
                     buffer_lock.release()
 
                     # Continue with the next ACC
@@ -417,6 +425,11 @@ class ParameterFreeAGD:
                         ACC_paused_flag.value = 1
                     time.sleep(WAIT_TIME_FOR_LOCK)
 
+        if shared_buffers_dict:
+            buffer_lock.acquire()
+            global_eta.value = eta
+            global_sigma.value = sigma
+            buffer_lock.release()
         return point_x, eta, sigma, iteration
 
     def ACC_iter(
@@ -502,7 +515,16 @@ class ParameterFreeAGD:
                 epsilon_l = theta * epsilon_0 / 4
                 epsilon_M = a * epsilon_0 / 4
 
-                eta, A, z, point_v, point_yh, point_y, grad_mapping, _iteration = self.AGD_iter(
+                (
+                    eta,
+                    A,
+                    z,
+                    point_v,
+                    point_yh,
+                    point_y,
+                    grad_mapping,
+                    _iteration,
+                ) = self.AGD_iter(
                     objective_function,
                     reg_objective_function,
                     feasible_region,
@@ -548,7 +570,6 @@ class ParameterFreeAGD:
         eta_0,
     ):
         """Executing one AGD-Iter as described in Algo 1 of the paper."""
-        LOGGER.info("AGD_iter_starts")
         iteration = 0
         eta_flag = False
 
@@ -652,6 +673,7 @@ class ParameterFreeAGD:
             - a * reg_objective_function.evaluate_grad(point_x.cartesian_coordinates)
             + sigma * a * point_x.cartesian_coordinates
         )
+        LOGGER.info(f"epsilon_M = {epsilon_M}")
         point_v = argmin_quadratic_over_active_set(
             quadratic_coefficient=(sigma * A + eta_0) / 2,
             linear_vector=(-z),

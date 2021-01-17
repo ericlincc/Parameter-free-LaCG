@@ -82,10 +82,6 @@ class _AbstractObjectiveFunction(ABC):
         pass
 
     @abstractmethod
-    def update_self(self, *args, **kwargs):
-        pass
-
-    @abstractmethod
     def evaluate(self, x):
         """An abstract method to evaluate function value."""
         pass
@@ -116,9 +112,6 @@ class Quadratic(_AbstractObjectiveFunction):
 
     def line_search(self, grad, d, x):
         return -np.dot(grad, d) / np.dot(d, self.M.dot(d))
-
-    def update_self(self):
-        pass
 
     def evaluate(self, x):
         return 0.5 * np.dot(x, self.M.dot(x)) + np.dot(self.b, x)
@@ -174,9 +167,6 @@ class HuberLoss(_AbstractObjectiveFunction):
         else:
             return self.rad / dist * (x - self.ref)
 
-    def update_self(self):
-        pass
-
 
 class RegularizedObjectiveFunction(_AbstractObjectiveFunction):
     """Regularize an objective function with a quadratic function.
@@ -189,7 +179,9 @@ class RegularizedObjectiveFunction(_AbstractObjectiveFunction):
         self.reference_point = reference_point
 
         if not self.objective_function.dim == self.reference_point.shape[0]:
-            raise ValueError("Dimension of reference_point does not equal that of objective_function")
+            raise ValueError(
+                "Dimension of reference_point does not equal that of objective_function"
+            )
         self._dim = objective_function.dim
 
     @property
@@ -207,12 +199,12 @@ class RegularizedObjectiveFunction(_AbstractObjectiveFunction):
     def line_search(self, grad, d):
         pass
 
-    def update_self(self, *args, **kwargs):
-        pass
-
     def evaluate(self, x):
         x_diff = x - self.reference_point
-        return self.objective_function.evaluate(x) + self.sigma * np.linalg.norm(x_diff) ** 2 / 2
+        return (
+            self.objective_function.evaluate(x)
+            + self.sigma * np.linalg.norm(x_diff) ** 2 / 2
+        )
 
     def evaluate_grad(self, x):
         x_diff = x - self.reference_point

@@ -3,9 +3,10 @@
 
 
 import logging
-from scipy.sparse import csc_matrix
-import numpy as np
 import time
+
+import numpy as np
+from scipy.sparse import csc_matrix
 
 
 logging.basicConfig(
@@ -17,6 +18,9 @@ LOGGER = logging.getLogger()
 
 
 DISPLAY_DECIMALS = 10
+
+
+# Helper classes
 
 
 class Point:
@@ -98,6 +102,8 @@ class Point:
         )
 
     def __mul__(self, t):
+        """Overloading multiplication with an int/float."""
+
         return Point(
             self.cartesian_coordinates * t,
             tuple([i * t for i in self.barycentric_coordinates]),
@@ -232,6 +238,9 @@ class ExitCriterion:
             raise ValueError("Invalid criterion_type: {0}".format(self.criterion_type))
 
 
+# Helper functions
+
+
 def line_search(self, grad, d, x):
     return -np.dot(grad, d) / np.dot(d, self.M.dot(d))
 
@@ -269,6 +278,7 @@ def backtracking_step_size(function, d, x, grad, L, alpha_max, tau, eta):
     return alpha, M
 
 
+# TODO: Are we using this?
 # Provides an initial estimate for the smoothness parameter.
 def smoothnessEstimate(x0, function):
     L = 1.0e-3
@@ -287,15 +297,6 @@ def new_vertex_fail_fast(vertex, active_set):
         if j == len(active_set[i]) - 1:
             return False, i
     return True, np.nan
-
-
-# def step_size(function, d, grad, x, type_step="EL", maxStep=None):
-#     """ Stepsize selection for the algorithm."""
-#     if type_step == "SS":
-#         return -np.dot(grad, d) / (function.largest_eigenvalue * np.dot(d, d))
-#     else:
-#         # Exact Linesearch.
-#         return function.line_search(grad, d, x)
 
 
 def delete_vertex_index(index, active_set, lambdas):
@@ -340,32 +341,6 @@ def calculate_stepsize(x, d):
         return min(val)
 
 
-def max_min_vertex_backup(grad, active_set):
-    maxProd = np.dot(active_set[0], grad)
-    minProd = np.dot(active_set[0], grad)
-    maxInd = 0
-    minInd = 0
-    for i in range(len(active_set)):
-        if np.dot(active_set[i], grad) > maxProd:
-            maxProd = np.dot(active_set[i], grad)
-            maxInd = i
-        else:
-            if np.dot(active_set[i], grad) < minProd:
-                minProd = np.dot(active_set[i], grad)
-                minInd = i
-    return active_set[maxInd], maxInd, active_set[minInd], minInd
-
-
-def max_min_vertex_quick_exit_backup(feasible_region, grad, x, active_set, phi, K):
-    for i in range(len(active_set)):
-        if np.dot(grad, active_set[i] - x) >= phi / K:
-            return active_set[i], i, None, None
-        if np.dot(grad, x - active_set[i]) >= phi / K:
-            return None, None, active_set[i], i
-    v = feasible_region.linear_optimization_oracle(grad)
-    return None, None, v, None
-
-
 # TODO: Optimise and clean up these projection methods
 # TODO: Need more consistent variable naming below
 def argmin_quadratic_over_active_set(
@@ -407,7 +382,6 @@ def project_onto_active_set(
     active_set,
     barycentric_coordinates,
     stopping_criterion,
-    barycentric_threshold=0.0,
     time_limit=np.inf,
     max_steps=np.inf,
 ):
@@ -429,10 +403,6 @@ def project_onto_active_set(
     stopping_criterion : class
         Class that contains a function "evaluate" that determines if the exit
         criteria has been met.
-    barycentric_threshold : float
-        Threshold for the barycentric coordinates. Any value in the barycentric
-        coordinates below this value will be set to zero and the corresponding
-        weight will be assigned to the other vertices.
     time_limit : float
         Maximum time for which the algorithm will be run.
     max_steps : int
@@ -465,16 +435,6 @@ def project_onto_active_set(
         time_limit=time_limit,
         max_iteration=max_steps,
     )
-
-    if barycentric_threshold > 0.0:
-        active_set, x_barycentric_coordinates = remove_vertives(
-            active_set,
-            x_barycentric_coordinates,
-            barycentric_threshold,
-        )
-        x = np.zeros(active_set[0].shape)
-        for i in range(len(active_set)):
-            x += x_barycentric_coordinates[i] * active_set[i]
     return x, active_set, x_barycentric_coordinates
 
 
@@ -512,21 +472,6 @@ class StoppingCriterion:
                 * np.linalg.norm(w - self.reference_point.cartesian_coordinates) ** 2
                 < FW_gap
             )
-
-
-def remove_vertives(active_set, barycentric_coordinates, barycentric_threshold):
-    new_active_set = []
-    new_barycentric_coordinates = []
-    for i in range(len(active_set)):
-        if barycentric_coordinates[i] > barycentric_threshold:
-            new_active_set.append(active_set[i])
-            new_barycentric_coordinates.append(barycentric_coordinates[i])
-    aux = sum(new_barycentric_coordinates)
-    new_barycentric_coordinates = [
-        x + (1.0 - aux) / len(new_barycentric_coordinates)
-        for x in new_barycentric_coordinates
-    ]
-    return new_active_set, new_barycentric_coordinates
 
 
 def accelerated_projected_gradient_descent(
@@ -583,11 +528,11 @@ def accelerated_projected_gradient_descent(
     else:
         alpha = deque([np.sqrt(q)], maxlen=2)
     grad = f.evaluate_grad(x[-1])
-    FWGap = grad.dot(x[-1] - feasible_region.lp_oracle(grad))
+    fw_gap = grad.dot(x[-1] - feasible_region.lp_oracle(grad))
     time_ref = time.time()
     it_count = 0
-    gap_values = [FWGap]
-    while stopping_criterion.evaluate(x[-1], FWGap):
+    gap_values = [fw_gap]
+    while stopping_criterion.evaluate(x[-1], fw_gap):
         x.append(feasible_region.projection(y - 1 / L * f.evaluate_grad(y)))
         if (mu < 1.0e-3) or q == 1:  # TODO: Alex check later
             alpha.append(0.5 * (1 + np.sqrt(1 + 4 * alpha[-1] * alpha[-1])))
@@ -600,66 +545,15 @@ def accelerated_projected_gradient_descent(
             beta = alpha[-2] * (1 - alpha[-2]) / (alpha[-2] ** 2 - alpha[-1])
         y = x[-1] + beta * (x[-1] - x[-2])
         grad = f.evaluate_grad(x[-1])
-        FWGap = grad.dot(x[-1] - feasible_region.lp_oracle(grad))
+        fw_gap = grad.dot(x[-1] - feasible_region.lp_oracle(grad))
         it_count += 1
         if time.time() - time_ref > time_limit or it_count > max_iteration:
             break
-        gap_values.append(FWGap)
-        LOGGER.info(f"FWGap = {FWGap}")
+        gap_values.append(fw_gap)
     w = np.zeros(len(active_set[0]))
     for i in range(len(active_set)):
         w += x[-1][i] * active_set[i]
     return w, x[-1].tolist(), gap_values
-
-
-def projected_gradient_descent(
-    x0,
-    function,
-    feasible_region,
-    tolerance,
-):
-    """
-    Run projected gradient descent.
-
-    References
-    ----------
-    Cauchy, A. (1847). Méthode générale pour la résolution des systemes
-    d’équations simultanées. Comp. Rend. Sci. Paris, 25(1847), 536-538.
-
-    Parameters
-    ----------
-    x0 : numpy array.
-        Initial point.
-    function: function being minimized
-        Function that we will minimize. Gradients are computed through a
-        function.grad(x) function that returns the gradient at x as a
-        numpy array.
-    feasible_region : feasible region function.
-        Returns projection oracle of a point x onto the feasible region,
-        which are computed through the function feasible_region.project(x).
-        Additionally, a LMO is used to compute the Frank-Wolfe gap (used as a
-        stopping criterion) through the function
-        feasible_region.linear_optimization_oracle(grad) function, which
-        minimizes <x, grad> over the feasible region.
-    tolerance : float
-        Frank-Wolfe accuracy to which the solution is outputted.
-
-    Returns
-    -------
-    x : numpy array
-        Outputted solution with primal gap below the target tolerance
-    """
-    x = x0
-    grad = function.evaluate_grad(x)
-    L = function.largest_eigenvalue()
-    while np.dot(grad, x - feasible_region.lp_oracle(grad)) > tolerance:
-        new_x = feasible_region.projection(x - 1 / L * grad)
-        alpha = step_size(
-            function, x, new_x - x, grad, 1.0, {"type_step": "line_search"}
-        )
-        x = x + alpha * (new_x - x)
-        grad = function.evaluate_grad(x)
-    return x
 
 
 class projection_objective_function:

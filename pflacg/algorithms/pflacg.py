@@ -10,7 +10,7 @@ import numpy as np
 
 from pflacg.experiments.objective_functions import RegularizedObjectiveFunction
 from pflacg.algorithms._abstract_algorithm import _AbstractAlgorithm
-from pflacg.algorithms._algorithms_utils import *
+from pflacg.algorithms._algorithms_utils import *  # TODO: Import only the methods and classes we need
 from pflacg.experiments.feasible_regions import ConvexHull
 
 
@@ -22,9 +22,9 @@ logging.basicConfig(
 LOGGER = logging.getLogger()
 
 
-WAIT_TIME_FOR_LOCK = 1
+WAIT_TIME_FOR_LOCK = 0.1
+MAX_NUM_WAIT_INTERVALS = 1800
 
-ACCURACY = 32
 
 # Helper functions
 
@@ -103,10 +103,7 @@ class ParameterFreeLaCG(_AbstractAlgorithm):
         global_sigma = Value("d", 0)
         ACC_paused_flag = Value("i", 0)
         buffer_lock = Lock()
-
-        global_iter = None
-        if self.iter_sync:
-            global_iter = Value("i", 0)
+        global_iter = Value("i", 0)
 
         ACC_restart_flag = True
         ACC_process_started = False
@@ -175,6 +172,7 @@ class ParameterFreeLaCG(_AbstractAlgorithm):
             LOGGER.info(f"FAFW returned at global_iter = {_global_iter}")
 
             # if iteration sync, need to wait for ACC to complete same #iterations
+            num_wait_interval = 0
             while self.iter_sync and ACC_process_started and ACC_process.is_alive():
                 with ACC_paused_flag.get_lock():
                     _ACC_paused_flag = ACC_paused_flag.value
@@ -184,6 +182,10 @@ class ParameterFreeLaCG(_AbstractAlgorithm):
                 else:
                     LOGGER.info("Waiting for ACC")
                     time.sleep(WAIT_TIME_FOR_LOCK)
+                    num_wait_interval += 1
+                    assert (
+                        num_wait_interval <= MAX_NUM_WAIT_INTERVALS
+                    )  # TODO: Remove after debugging
 
             LOGGER.info("Acquiring buffer")
             # retrieve the most recent output
@@ -209,7 +211,7 @@ class ParameterFreeLaCG(_AbstractAlgorithm):
             assert (
                 strong_FW_gap_FAFW <= target_accuracy
             )  # TODO: remove this after debugging.
-            
+
             if strong_FW_gap_FAFW <= min(strong_FW_gap_ACC, strong_FW_gap_ACC_prev / 2):
                 # Terminate ACC process and set restart flag
                 LOGGER.info("FAFW did better")
@@ -376,7 +378,7 @@ class ParameterFreeAGD:
             active_set=feasible_region.vertices,
             reference_point=point_x,
             tolerance_type="gradient mapping",
-            tolerance=eta / ACCURACY,
+            tolerance=eta / 32,
         )
         grad_mapping = (
             point_x.cartesian_coordinates - point_x_plus.cartesian_coordinates
@@ -389,10 +391,12 @@ class ParameterFreeAGD:
                 point_initial=point_x,
                 eta=eta,
                 sigma=sigma,
+                global_eta=global_eta,
+                global_sigma=global_sigma,
             )
             iteration += _iteration
 
-            LOGGER.info("About to update buffer.")
+            LOGGER.info("ACC about to update buffer.")
             if shared_buffers_dict:
                 buffer_lock.acquire()
                 global_eta.value = eta
@@ -439,6 +443,8 @@ class ParameterFreeAGD:
         point_initial,
         eta,
         sigma,
+        global_eta=None,
+        global_sigma=None,
     ):
         """Executes one call of ACC from Algorithm 4 in the paper.
 
@@ -463,7 +469,6 @@ class ParameterFreeAGD:
 
         """
 
-        LOGGER.info("ACC_iter starts")
         # Initialization
         point_x = point_initial
         a = 1
@@ -485,9 +490,9 @@ class ParameterFreeAGD:
                 active_set=feasible_region.vertices,
                 reference_point=point_x,
                 tolerance_type="gradient mapping",
-                tolerance=(eta_0 + sigma) / ACCURACY,
+                tolerance=(eta_0 + sigma) / 32,
             )
-            epsilon_0 = ((eta_0 + sigma) / ACCURACY) * (
+            epsilon_0 = ((eta_0 + sigma) / 32) * (
                 np.linalg.norm(
                     point_y.cartesian_coordinates - point_x.cartesian_coordinates
                 )
@@ -536,6 +541,7 @@ class ParameterFreeAGD:
                     sigma,
                     epsilon_0,
                     eta_0,
+                    global_eta=global_eta,
                 )
                 iteration += _iteration
                 if (
@@ -550,9 +556,11 @@ class ParameterFreeAGD:
                 sigma_flag = True
             else:
                 sigma = sigma / self.estimate_ratio
+                if global_sigma:
+                    with global_sigma.get_lock():
+                        global_sigma.value = sigma
                 LOGGER.info(f"Sigma halved: sigma = {sigma}")
 
-        LOGGER.info("ACC_iter returns")
         return point_yh, grad_mapping, eta, sigma, iteration
 
     def AGD_iter(
@@ -568,6 +576,7 @@ class ParameterFreeAGD:
         sigma,
         epsilon_0,
         eta_0,
+        global_eta=None,
     ):
         """Executing one AGD-Iter as described in Algo 1 of the paper."""
         iteration = 0
@@ -615,6 +624,9 @@ class ParameterFreeAGD:
                 eta_flag = True
             else:
                 eta = self.estimate_ratio * eta  # Maybe udpate a global eta too
+                if global_eta:
+                    with global_eta.get_lock():
+                        global_eta.value = eta
                 LOGGER.info(f"Eta doubled: eta = {eta}")
 
         grad_mapping = (eta + sigma) * (
@@ -673,7 +685,6 @@ class ParameterFreeAGD:
             - a * reg_objective_function.evaluate_grad(point_x.cartesian_coordinates)
             + sigma * a * point_x.cartesian_coordinates
         )
-        LOGGER.info(f"epsilon_M = {epsilon_M}")
         point_v = argmin_quadratic_over_active_set(
             quadratic_coefficient=(sigma * A + eta_0) / 2,
             linear_vector=(-z),
@@ -762,8 +773,7 @@ class FractionalAwayStepFW:
             save_and_output_results=False,
             global_iter=global_iter,
         )
-        
-        
+
         # print("After: ", compute_strong_FW_gap(point_out, objective_function, feasible_region))
         # print("Sufficient decrease?  ", compute_strong_FW_gap(point_out, objective_function, feasible_region) < target_accuracy)
         return point_out

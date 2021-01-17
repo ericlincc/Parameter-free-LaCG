@@ -9,19 +9,13 @@ import numpy as np
 from pflacg.algorithms._abstract_algorithm import _AbstractAlgorithm
 
 from pflacg.algorithms._algorithms_utils import (
+    Point,
     step_size,
     DISPLAY_DECIMALS,
     new_vertex_fail_fast,
     delete_vertex_index,
     calculate_stepsize,
 )
-
-from pflacg.algorithms._algorithms_utils import (
-    Point,
-    max_min_vertex_backup,
-    max_min_vertex_quick_exit_backup,
-)
-
 
 logging.basicConfig(
     level=logging.INFO,
@@ -431,9 +425,7 @@ def FW_away_lazy(
                     step_size_param,
                 )
                 if flag == False:
-                    new_barycentric_coordinates = list(
-                        point_x.barycentric_coordinates
-                    )
+                    new_barycentric_coordinates = list(point_x.barycentric_coordinates)
                     new_barycentric_coordinates.append(0.0)
                     point_x = Point(
                         point_x.cartesian_coordinates,

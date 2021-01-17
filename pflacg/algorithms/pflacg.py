@@ -209,7 +209,7 @@ class ParameterFreeLaCG(_AbstractAlgorithm):
             assert (
                 strong_FW_gap_FAFW <= target_accuracy
             )  # TODO: remove this after debugging.
-
+            
             if strong_FW_gap_FAFW <= min(strong_FW_gap_ACC, strong_FW_gap_ACC_prev / 2):
                 # Terminate ACC process and set restart flag
                 LOGGER.info("FAFW did better")
@@ -745,6 +745,8 @@ class FractionalAwayStepFW:
             strong_FW_gap = np.dot(grad, point_a.cartesian_coordinates - v)
             target_accuracy = strong_FW_gap * self.ratio
 
+        # print("Before: ", strong_FW_gap)
+
         from pflacg.algorithms.fw_variants import FrankWolfe
 
         fw_algorithm = FrankWolfe(self.fw_variant, "line_search")
@@ -760,4 +762,8 @@ class FractionalAwayStepFW:
             save_and_output_results=False,
             global_iter=global_iter,
         )
+        
+        
+        # print("After: ", compute_strong_FW_gap(point_out, objective_function, feasible_region))
+        # print("Sufficient decrease?  ", compute_strong_FW_gap(point_out, objective_function, feasible_region) < target_accuracy)
         return point_out

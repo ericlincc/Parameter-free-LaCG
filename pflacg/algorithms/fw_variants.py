@@ -98,24 +98,24 @@ class FrankWolfe(_AbstractAlgorithm):
 
         if point_initial is None:
             vertex = feasible_region.initial_point.copy()
-            x = Point(vertex, (1.0,), (vertex,))
+            point_x = Point(vertex, (1.0,), (vertex,))
         else:
-            x = point_initial
+            point_x = point_initial
 
         start_time = time.time()
-        grad = objective_function.evaluate_grad(x.cartesian_coordinates)
+        grad = objective_function.evaluate_grad(point_x.cartesian_coordinates)
 
         iteration = 0
         duration = 0.0
-        f_val = objective_function.evaluate(x.cartesian_coordinates)
+        f_val = objective_function.evaluate(point_x.cartesian_coordinates)
         v = feasible_region.lp_oracle(grad)
         if self.fw_variant == "FW" or self.fw_variant == "DIPFW":
             strong_wolfe_gap = 0.0
         else:
-            a, index_max = feasible_region.away_oracle(grad, x)
+            a, index_max = feasible_region.away_oracle(grad, point_x)
             strong_wolfe_gap = grad.dot(a.cartesian_coordinates - v)
 
-        dual_gap = grad.dot(x.cartesian_coordinates - v)
+        dual_gap = grad.dot(point_x.cartesian_coordinates - v)
 
         if self.fw_variant == "lazy" or self.fw_variant == "lazy quick exit":
             phi_val = [dual_gap]
@@ -131,51 +131,51 @@ class FrankWolfe(_AbstractAlgorithm):
             run_history = [run_status]
 
         while True:
-            x_prev = x
+            point_x_prev = point_x
             if self.fw_variant == "AFW":
-                x, dual_gap_prev, strong_wolfe_gap_prev = away_step_fw(
+                point_x, dual_gap_prev, strong_wolfe_gap_prev = away_step_fw(
                     objective_function,
                     feasible_region,
-                    x,
+                    point_x,
                     self.step_size_param,
                 )
             if self.fw_variant == "PFW":
-                x, dual_gap_prev, strong_wolfe_gap_prev = pairwise_step_fw(
+                point_x, dual_gap_prev, strong_wolfe_gap_prev = pairwise_step_fw(
                     objective_function,
                     feasible_region,
-                    x,
+                    point_x,
                     self.step_size_param,
                 )
             if self.fw_variant == "FW":
-                x, dual_gap_prev, strong_wolfe_gap_prev = step_fw(
+                point_x, dual_gap_prev, strong_wolfe_gap_prev = step_fw(
                     objective_function,
                     feasible_region,
-                    x,
+                    point_x,
                     self.step_size_param,
                 )
             if self.fw_variant == "lazy":
-                x, dual_gap_prev, strong_wolfe_gap_prev = fw_away_lazy(
+                point_x, dual_gap_prev, strong_wolfe_gap_prev = fw_away_lazy(
                     objective_function,
                     feasible_region,
-                    x,
+                    point_x,
                     self.step_size_param,
                     phi_val,
                 )
             # if self.fw_variant == "lazy quick exit":
-            #     x, dual_gap, strong_wolfe_gap = fw_away_lazy_quick_exit(
+            #     point_x, dual_gap, strong_wolfe_gap = fw_away_lazy_quick_exit(
             #         objective_function,
             #         feasible_region,
-            #         x,
+            #         point_x,
             #         self.step_size_param,
             #         phi_val,
             #     )
             if self.fw_variant == "DIPFW":
-                x, dual_gap_prev, strong_wolfe_gap_prev = dipfw(
-                    objective_function, feasible_region, x, self.step_size_param
+                point_x, dual_gap_prev, strong_wolfe_gap_prev = dipfw(
+                    objective_function, feasible_region, point_x, self.step_size_param
                 )
             iteration += 1
             duration = time.time() - start_time
-            f_val = objective_function.evaluate(x.cartesian_coordinates)
+            f_val = objective_function.evaluate(point_x.cartesian_coordinates)
             run_status = (
                 iteration,
                 duration,
@@ -201,7 +201,7 @@ class FrankWolfe(_AbstractAlgorithm):
         if save_and_output_results:
             return run_history
         else:
-            return x_prev
+            return point_x_prev
 
 
 # Note that the VANILLA FW algorithm only uses the cartesian coordinates
@@ -265,7 +265,11 @@ def away_step_fw(objective_function, feasible_region, point_x, step_size_param):
                 )
             return point_x + alpha * (point_v - point_x), wolfe_gap, strong_wolfe_gap
         else:
-            return Point(v, (1.0,), (v,)), wolfe_gap, strong_wolfe_gap
+            return (
+                Point(v, (1.0,), (v,)),
+                wolfe_gap,
+                strong_wolfe_gap,
+            )  # TODO: Can we use point_v here instead?
     else:
         alpha_max = point_x.barycentric_coordinates[index_max] / (
             1.0 - point_x.barycentric_coordinates[index_max]

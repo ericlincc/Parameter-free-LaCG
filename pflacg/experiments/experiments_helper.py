@@ -20,28 +20,31 @@ def fake_callback(model, where, value):
             pass
 
 
-def max_vertex(grad, point):
-    """Iterate over current active set and return vertex with greatest inner product."""
-    max_prod = grad.dot(point.support[0])
+def max_vertex(d, vertices):
+    """
+    Iterate over current active set and return vertex with greatest inner product.
+
+    Parameters
+    ----------
+    d: np.ndarray
+        Direction.
+    vertices: tuple(np.ndarray) or list(np.ndarray)
+        Tuple or list of vertices.
+
+    Returns
+    -------
+    Point
+    """
+
+    max_prod = d.dot(vertices[0])
     max_ind = 0
-    for i in range(1, len(point.support)):
-        if grad.dot(point.support[i]) > max_prod:
-            max_prod = grad.dot(point.support[i])
+    for i in range(1, len(vertices)):
+        if d.dot(vertices[i]) > max_prod:
+            max_prod = d.dot(vertices[i])
             max_ind = i
-    barycentric = np.zeros(len(point.support))
+    barycentric = np.zeros(len(vertices))
     barycentric[max_ind] = 1.0
-    return Point(point.support[max_ind], barycentric, point.support), max_ind
-
-
-def max_vertex_old(grad, active_vertex):
-    """Iterate over current active set and return vertex with greatest inner product."""
-    max_prod = np.dot(active_vertex[0], grad)
-    max_ind = 0
-    for i in range(len(active_vertex)):
-        if np.dot(active_vertex[i], grad) > max_prod:
-            max_prod = np.dot(active_vertex[i], grad)
-            max_ind = i
-    return active_vertex[max_ind], max_ind
+    return Point(vertices[max_ind], barycentric, vertices), max_ind
 
 
 def generate_random_graph(n, p):

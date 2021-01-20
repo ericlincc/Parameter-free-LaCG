@@ -7,7 +7,7 @@ import math
 
 import numpy as np
 
-from pflacg.experiments.experiments_helper import max_vertex_old, max_vertex
+from pflacg.experiments.experiments_helper import max_vertex
 
 
 logging.basicConfig(
@@ -39,10 +39,38 @@ class _AbstractFeasibleRegion(ABC):
 
     @abstractmethod
     def lp_oracle(self, d):
+        """
+        Compute the linear oracle.
+
+        Parameters
+        ----------
+        d : np.ndarray
+            The direction.
+
+        Returns
+        -------
+        np.ndarray
+        """
+
         pass
 
     @abstractmethod
-    def away_oracle(self, d, active_vertices):
+    def away_oracle(self, d, point_x):
+        """
+        Compute the away oracle.
+
+        Parameters
+        ----------
+        d: np.ndarray
+            The direction.
+        point_x: Point
+            Point x with its proper support.
+
+        Returns
+        -------
+        Point
+        """
+
         pass
 
     def projection(self, x, accuracy):
@@ -58,10 +86,15 @@ class ConvexHull(_AbstractFeasibleRegion):
         self.vertices = vertices
 
     def lp_oracle(self, d):
-        return max_vertex(-d, self.vertices)
+        val, index = d.dot(self.vertices[0]), 0
+        for _index, vertex in enumerate(self.vertices):
+            _val = d.dot(vertex)
+            if _val < val:
+                val, index = _val, _index
+        return self.vertices[index]
 
-    def away_oracle(self, d, point):
-        return max_vertex(d, point)
+    def away_oracle(self, d, point_x):
+        return max_vertex(d, point_x.support)
 
     def projection(self, x, accuracy):
         pass
@@ -80,17 +113,17 @@ class BirkhoffPolytope(_AbstractFeasibleRegion):
     def initial_active_set(self):
         return [self.initial_point()]
 
-    def lp_oracle(self, x):
+    def lp_oracle(self, d):
         from scipy.optimize import linear_sum_assignment
 
-        objective = x.reshape((self.mat_dim, self.mat_dim))
+        objective = d.reshape((self.mat_dim, self.mat_dim))
         matching = linear_sum_assignment(objective)
         solution = np.zeros((self.mat_dim, self.mat_dim))
         solution[matching] = 1
         return solution.reshape(self.dim)
 
-    def away_oracle(self, grad, active_vertex):
-        return max_vertex(grad, active_vertex)
+    def away_oracle(self, grad, point_x):
+        return max_vertex(grad, point_x.support)
 
 
 class ProbabilitySimplexPolytope(_AbstractFeasibleRegion):
@@ -121,8 +154,8 @@ class ProbabilitySimplexPolytope(_AbstractFeasibleRegion):
     #        v[index_max] = 1.0
     #        return v, index_max
 
-    def away_oracle(self, grad, point):
-        return max_vertex(grad, point)
+    def away_oracle(self, grad, point_x):
+        return max_vertex(grad, point_x.support)
 
     def projection(self, x):
         (n,) = x.shape  # will raise ValueError if v is not 1-D
@@ -157,8 +190,8 @@ class L1UnitBallPolytope(_AbstractFeasibleRegion):
         v[max_ind] = -1.0 * np.sign(x[max_ind])
         return v
 
-    def away_oracle(self, grad, active_vertex):
-        return max_vertex(grad, active_vertex)
+    def away_oracle(self, grad, point_x):
+        return max_vertex(grad, point_x.support)
 
     def projection(self, x):
         u = np.abs(x)
@@ -197,8 +230,8 @@ class L2UnitBallPolytope(_AbstractFeasibleRegion):
     def lp_oracle(self, x):
         return -x / np.linalg.norm(x)
 
-    def away_oracle(self, grad, active_vertex):
-        return max_vertex(grad, active_vertex)
+    def away_oracle(self, grad, point_x):
+        return max_vertex(grad, point_x.support)
 
     def projection(self, x):
         return x / np.linalg.norm(x)

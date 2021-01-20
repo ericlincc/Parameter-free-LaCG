@@ -251,7 +251,7 @@ def compute_wolfe_gap(point_x, objective_function, feasible_region):
 def compute_strong_wolfe_gap(point_x, objective_function, feasible_region):
     grad = objective_function.evaluate_grad(point_x.cartesian_coordinates)
     v = feasible_region.lp_oracle(grad)
-    point_a, indexMax = feasible_region.away_oracle(grad, point_x)
+    point_a, _ = feasible_region.away_oracle(grad, point_x)
     strong_wolfe_gap = np.dot(grad, point_a.cartesian_coordinates - v)
     return strong_wolfe_gap
 
@@ -441,12 +441,12 @@ def project_onto_active_set(
 
     feas_reg = ProbabilitySimplexPolytope(len(active_set))
     projection_objective_fun = projection_objective_function(quadratic, linear, 0.0)
-    x, x_barycentric_coordinates, gap_values1 = accelerated_projected_gradient_descent(
+    x, x_barycentric_coordinates = accelerated_projected_gradient_descent(
         projection_objective_fun,
         feas_reg,
         active_set,
         stopping_criterion,
-        barycentric_coordinates,
+        np.array(barycentric_coordinates),
         time_limit=time_limit,
         max_iteration=max_steps,
     )
@@ -498,6 +498,7 @@ def accelerated_projected_gradient_descent(
     time_limit=60,
     max_iteration=100,
 ):
+    # TODO: The below description is not to date.
     """
     Run Nesterov's accelerated projected gradient descent.
 
@@ -529,51 +530,53 @@ def accelerated_projected_gradient_descent(
     x : numpy array
         Outputted solution with primal gap below the target tolerance
     """
-    from collections import deque
 
     LOGGER.info("Calling argmin")
 
     # Quantities we want to output.
     L = f.largest_eigenvalue()
     mu = f.smallest_eigenvalue()
-    initial_point = np.asarray(alpha0)
-    x = deque([initial_point], maxlen=2)
+    initial_point = alpha0
+    x = initial_point
     y = initial_point
     q = mu / L
     if (mu < 1.0e-3) or q == 1:  # TODO: Alex check later
-        alpha = deque([0], maxlen=2)
+        alpha = 0
     else:
-        alpha = deque([np.sqrt(q)], maxlen=2)
-    grad = f.evaluate_grad(x[-1])
-    fw_gap = grad.dot(x[-1] - feasible_region.lp_oracle(grad))
+        alpha = np.sqrt(q)
+    grad = f.evaluate_grad(x)
+    fw_gap = grad.dot(x - feasible_region.lp_oracle(grad))
     time_ref = time.time()
     it_count = 0
-    gap_values = [fw_gap]
-    while stopping_criterion.evaluate(x[-1], fw_gap):
-        x.append(feasible_region.projection(y - 1 / L * f.evaluate_grad(y)))
+
+    while stopping_criterion.evaluate(x, fw_gap):
+        x_ = x
+        x = feasible_region.projection(y - 1 / L * f.evaluate_grad(y))
         if (mu < 1.0e-3) or q == 1:  # TODO: Alex check later
-            alpha.append(0.5 * (1 + np.sqrt(1 + 4 * alpha[-1] * alpha[-1])))
-            beta = (alpha[-2] - 1.0) / alpha[-1]
+            alpha_ = alpha
+            alpha = 0.5 * (1 + np.sqrt(1 + 4 * alpha_ * alpha_))
+            beta = (alpha_ - 1.0) / alpha
         else:
-            root = np.roots([1, alpha[-1] ** 2 - q, -alpha[-1] ** 2])
+            root = np.roots([1, alpha ** 2 - q, -(alpha ** 2)])
             root = root[(root >= 0.0) & (root < 1.0)]
             assert len(root) != 0, "Root does not meet desired criteria.\n"
-            alpha.append(root[0])
-            beta = alpha[-2] * (1 - alpha[-2]) / (alpha[-2] ** 2 - alpha[-1])
-        y = x[-1] + beta * (x[-1] - x[-2])
-        grad = f.evaluate_grad(x[-1])
-        fw_gap = grad.dot(x[-1] - feasible_region.lp_oracle(grad))
+            _alpha = alpha
+            alpha = root[0]
+            beta = _alpha * (1 - _alpha) / (_alpha ** 2 - alpha)
+        y = x + beta * (x - x_)
+        grad = f.evaluate_grad(x)
+        _fw_gap = fw_gap
+        fw_gap = grad.dot(x - feasible_region.lp_oracle(grad))
         it_count += 1
         if time.time() - time_ref > time_limit or it_count > max_iteration:
             break
         # LOGGER.info(f"fw_gap = {fw_gap}")
-        if np.isclose(fw_gap, gap_values[-1]) and fw_gap < 1e-13:
+        if np.isclose(fw_gap, _fw_gap) and fw_gap < 1e-13:
             raise Exception("projection step is getting stuck")
-        gap_values.append(fw_gap)
     w = np.zeros(len(active_set[0]))
     for i in range(len(active_set)):
-        w += x[-1][i] * active_set[i]
-    return w, x[-1].tolist(), gap_values
+        w += x[i] * active_set[i]
+    return w, x.tolist()
 
 
 class projection_objective_function:

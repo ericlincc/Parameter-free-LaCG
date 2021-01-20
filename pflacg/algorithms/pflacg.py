@@ -294,6 +294,7 @@ class ParameterFreeAGD:
         initial_sigma=None,
         shared_buffers_dict=None,
         last_restart_iter=0,
+        epsilon_f=1e-4,
     ):
         """Run PF-ACC given an initial point and an active set/feasible region.
 
@@ -370,6 +371,16 @@ class ParameterFreeAGD:
         LOGGER.info(f"initial_eta = {initial_eta}")
         iteration = 0
 
+        # Early return if primal gap is small
+        wolfe_gap = compute_wolfe_gap(point_x, objective_function, feasible_region)
+        if wolfe_gap <= epsilon_f:
+            LOGGER.info("Early halting ACC with wolfe_gap <= epsilon_f")
+            buffer_lock.acquire()
+            global_eta.value = eta
+            global_sigma.value = sigma
+            buffer_lock.release()
+            return point_x, eta, sigma, iteration
+
         point_x_plus = argmin_quadratic_over_active_set(
             quadratic_coefficient=eta / 2.0,
             linear_vector=(
@@ -385,8 +396,8 @@ class ParameterFreeAGD:
             point_x.cartesian_coordinates - point_x_plus.cartesian_coordinates
         )
 
-        while np.linalg.norm(grad_mapping) > epsilon:
-            point_x, grad_mapping, eta, sigma, _iteration = self.ACC_iter(
+        while np.linalg.norm(grad_mapping) > epsilon and wolfe_gap > epsilon_f:
+            point_x, grad_mapping, wolfe_gap, eta, sigma, _iteration = self.ACC_iter(
                 objective_function,
                 feasible_region,
                 point_initial=point_x,
@@ -394,6 +405,7 @@ class ParameterFreeAGD:
                 sigma=sigma,
                 global_eta=global_eta,
                 global_sigma=global_sigma,
+                epsilon_f=epsilon_f,
             )
             iteration += _iteration
 
@@ -446,6 +458,7 @@ class ParameterFreeAGD:
         sigma,
         global_eta=None,
         global_sigma=None,
+        epsilon_f=1e-8,
     ):
         """Executes one call of ACC from Algorithm 4 in the paper.
 
@@ -543,8 +556,17 @@ class ParameterFreeAGD:
                     epsilon_0,
                     eta_0,
                     global_eta=global_eta,
+                    epsilon_f=1e-8,
                 )
                 iteration += _iteration
+
+                wolfe_gap = compute_wolfe_gap(
+                    point_yh, objective_function, feasible_region
+                )
+                if wolfe_gap <= epsilon_f:
+                    LOGGER.info("Early halt inside ACC with wolfe_gap <= epsilon_f")
+                    return point_yh, grad_mapping, wolfe_gap, eta, sigma, iteration
+
                 if (
                     np.linalg.norm(grad_mapping) ** 2 / (eta + sigma)
                     <= 9 * epsilon_0 / 4
@@ -562,7 +584,7 @@ class ParameterFreeAGD:
                         global_sigma.value = sigma
                 LOGGER.info(f"Sigma halved: sigma = {sigma}")
 
-        return point_yh, grad_mapping, eta, sigma, iteration
+        return point_yh, grad_mapping, wolfe_gap, eta, sigma, iteration
 
     def AGD_iter(
         self,
@@ -578,6 +600,7 @@ class ParameterFreeAGD:
         epsilon_0,
         eta_0,
         global_eta=None,
+        epsilon_f=1e-8,
     ):
         """Executing one AGD-Iter as described in Algo 1 of the paper."""
         iteration = 0

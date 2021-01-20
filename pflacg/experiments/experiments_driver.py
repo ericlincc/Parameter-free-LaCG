@@ -300,7 +300,7 @@ def run_algorithms_parser(argv_remaining):
         "--exit_criterion_type",
         type=str,
         required=True,
-        choices=["PG", "DG", "IT"],
+        choices=["PG", "DG", "SWG", "IT"],
         help="type of stopping condition",
     )
     parser.add_argument(

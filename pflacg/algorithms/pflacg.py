@@ -227,7 +227,7 @@ class ParameterFreeLaCG(_AbstractAlgorithm):
 
                 ACC_restart_flag = True
                 point_x_ACC = point_x_FAFW
-                active_set_ACC = point_x_ACC.support
+                active_set_ACC = point_x_FAFW.support
 
                 # Set output points
                 point_x_out = point_x_FAFW

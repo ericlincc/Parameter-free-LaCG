@@ -2,6 +2,6 @@
     "name" : "Sample Quadratic",
     "class_name" : "Quadratic",
     "args" : {
-        "dim" : 100
+        "dim" : 4900
     }
 }

@@ -229,9 +229,15 @@ class ExitCriterion:
             return primal_gap < self.criterion_value
         elif self.criterion_type == "DG":
             #            LOGGER.info("Wolfe gap: {0}".format(dual_gap))
-            return dual_gap < self.criterion_value
+            if(dual_gap is None):
+                return False
+            else:
+                return dual_gap < self.criterion_value
         elif self.criterion_type == "SWG":
-            return strong_wolfe_gap < self.criterion_value
+            if(strong_wolfe_gap is None):
+                return False
+            else:
+                return strong_wolfe_gap < self.criterion_value
         elif self.criterion_type == "IT":
             return iteration >= self.criterion_value
         else:

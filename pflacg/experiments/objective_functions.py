@@ -211,7 +211,6 @@ class RegularizedObjectiveFunction(_AbstractObjectiveFunction):
         return self.objective_function.evaluate_grad(x) + self.sigma * x_diff
 
 class graphical_lasso(_AbstractObjectiveFunction):
-    import autograd.numpy as np
     def __init__(self, n, S, lambaVal, delta = 0.0):
         self.dim = n
         self.S = S

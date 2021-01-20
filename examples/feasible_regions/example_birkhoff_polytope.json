@@ -2,6 +2,6 @@
     "name" : "Sample Birkhoff Polytope",
     "class_name" : "BirkhoffPolytope",
     "args" : {
-        "dim" : 100
+        "dim" : 4900
     }
 }

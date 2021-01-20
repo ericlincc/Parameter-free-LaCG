@@ -2,6 +2,6 @@
     "name" : "Sample Probalility Simplex",
     "class_name" : "ProbabilitySimplexPolytope",
     "args" : {
-        "dim" : 100
+        "dim" : 4900
     }
 }

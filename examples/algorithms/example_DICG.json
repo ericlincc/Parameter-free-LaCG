@@ -3,7 +3,7 @@
         "name" : "DICG",
         "class_name" : "FrankWolfe",
         "args" : { "fw_variant" : "DIPFW",
-				   "step_type" : "EL"
+				   "step_type" : "line_search"
         }
     }
 ]

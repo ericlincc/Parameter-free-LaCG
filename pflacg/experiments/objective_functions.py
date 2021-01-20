@@ -4,7 +4,8 @@
 from abc import ABC, abstractmethod
 import numpy as np
 from scipy.sparse import csc_matrix
-
+from scipy.optimize import minimize_scalar
+from scipy.sparse.linalg import splu
 
 # Helper functions
 
@@ -167,7 +168,6 @@ class HuberLoss(_AbstractObjectiveFunction):
         else:
             return self.rad / dist * (x - self.ref)
 
-
 class RegularizedObjectiveFunction(_AbstractObjectiveFunction):
     """Regularize an objective function with a quadratic function.
     f_{delta} (x) = f (x) + sigma * ||x - x_0||_2^2 / 2
@@ -209,3 +209,69 @@ class RegularizedObjectiveFunction(_AbstractObjectiveFunction):
     def evaluate_grad(self, x):
         x_diff = x - self.reference_point
         return self.objective_function.evaluate_grad(x) + self.sigma * x_diff
+
+class graphical_lasso(_AbstractObjectiveFunction):
+    import autograd.numpy as np
+    def __init__(self, n, S, lambaVal, delta = 0.0):
+        self.dim = n
+        self.S = S
+        self.lambdaVal = lambaVal
+        self.delta = 0.0
+        return       
+           
+    #Evaluate function.
+    def evaluate(self, X):
+        val = X.reshape((self.dim, self.dim))
+        return -self.logdetFun(val + self.delta*np.identity(self.dim)) + np.matrix.trace(np.matmul(self.S, val)) + 0.5*self.lambdaVal*np.sum(np.dot(X, X))
+
+    #Evaluate gradient.
+    def evaluate_grad(self, X):
+        val = X.reshape((self.dim, self.dim))
+        return (-np.linalg.inv(val + self.delta*np.identity(self.dim)) + self.S).flatten() + self.lambdaVal*X
+    
+    #Line Search.
+    def line_search(self, grad, d, x, maxStep = None):
+        options={'xatol': 1e-12, 'maxiter': 5000000, 'disp': 0}
+        def InnerFunction(t):  # Hidden from outer code
+                return self.fEval(x + t*d)
+        if(maxStep is None):
+            res = minimize_scalar(InnerFunction, bounds=(0, 1), method='bounded', options = options)
+        else:
+            res = minimize_scalar(InnerFunction, bounds=(0, maxStep), method='bounded', options = options)
+        return res.x
+    
+    def logarithmic_determinant(self, X):
+        lu = splu(X)
+        diagL = lu.L.diagonal().astype(np.complex128)
+        diagU = lu.U.diagonal().astype(np.complex128)
+        logdet = np.log(diagL).sum() + np.log(diagU).sum()
+        return logdet.real
+
+class logistic_regression(_AbstractObjectiveFunction):
+    def __init__(self, n, numSamples, samples, labels, mu = 0.0):
+        self.samples = samples.copy()
+        self.labels = labels.copy()
+        self.numSamples = numSamples
+        self.dim = n
+        self.mu = mu
+        return       
+           
+    def evaluate(self, x):
+        aux = np.sum(np.logaddexp(np.zeros(self.numSamples), np.multiply(self.samples.dot(-x), self.labels)))
+        return aux/self.numSamples + self.mu*np.dot(x,x)/2.0
+    
+    def evaluate_grad(self, x):
+        aux =  -self.labels/(1.0 + np.exp(np.multiply(self.samples.dot(x), self.labels)))
+        vectors = self.samples.T.multiply(aux).sum(axis = 1)
+        return np.squeeze(np.asarray(vectors))/self.numSamples + self.mu*x
+    
+    #Line Search.
+    def line_search(self, grad, d, x, maxStep = None):
+        options={'xatol': 1e-12, 'maxiter': 50000, 'disp': 0}
+        def InnerFunction(t):  # Hidden from outer code
+                return self.fEval(x + t*d)
+        if(maxStep is None):
+            res = minimize_scalar(InnerFunction, bounds=(0, 1), method='bounded', options = options)
+        else:
+            res = minimize_scalar(InnerFunction, bounds=(0, maxStep), method='bounded', options = options)
+        return res.x

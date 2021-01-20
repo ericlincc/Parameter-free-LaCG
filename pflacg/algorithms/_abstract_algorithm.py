@@ -15,7 +15,11 @@ class _AbstractAlgorithm(ABC):
 
     @abstractmethod
     def run(
-        self, objective_function, feasible_region, exit_criterion, **kwargs,
+        self,
+        objective_function,
+        feasible_region,
+        exit_criterion,
+        **kwargs,
     ):
         """
         Abstract method for running the algorithm on an objective function over a feasible region

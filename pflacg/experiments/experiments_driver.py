@@ -194,7 +194,10 @@ def run_algorithms(args):
         # run algorithm
         LOGGER.info(f"Running {algorithm_name} now.")
         run_history = algorithm.run(
-            objective_function, feasible_region, exit_criterion, **optional_run_args,
+            objective_function,
+            feasible_region,
+            exit_criterion,
+            **optional_run_args,
         )
 
         # save data to file in json format
@@ -322,7 +325,10 @@ def run_algorithms_parser(argv_remaining):
         help="max time in seconds allowed to run each algorithm. default=1800",
     )
     parser.add_argument(
-        "--random_seed", type=int, required=False, help="Seed for random",
+        "--random_seed",
+        type=int,
+        required=False,
+        help="Seed for random",
     )
     parser.add_argument(
         "--save_objects",

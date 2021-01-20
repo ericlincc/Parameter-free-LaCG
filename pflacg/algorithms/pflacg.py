@@ -12,6 +12,7 @@ from pflacg.experiments.objective_functions import RegularizedObjectiveFunction
 from pflacg.algorithms._abstract_algorithm import _AbstractAlgorithm
 from pflacg.algorithms._algorithms_utils import *  # TODO: Import only the methods and classes we need
 from pflacg.experiments.feasible_regions import ConvexHull
+from pflacg.algorithms.fw_variants import FrankWolfe
 
 
 logging.basicConfig(
@@ -22,19 +23,8 @@ logging.basicConfig(
 LOGGER = logging.getLogger()
 
 
-WAIT_TIME_FOR_LOCK = 0.1
-MAX_NUM_WAIT_INTERVALS = 1800
-
-
-# Helper functions
-
-
-def compute_strong_FW_gap(point_x, objective_function, feasible_region):
-    grad = objective_function.evaluate_grad(point_x.cartesian_coordinates)
-    v = feasible_region.lp_oracle(grad)
-    point_a, indexMax = feasible_region.away_oracle(grad, point_x)
-    strong_FW_gap = np.dot(grad, point_a.cartesian_coordinates - v)
-    return strong_FW_gap
+WAIT_TIME_FOR_LOCK = 0.2
+MAX_NUM_WAIT_INTERVALS = 600
 
 
 # Algorithms
@@ -63,7 +53,7 @@ class ParameterFreeLaCG(_AbstractAlgorithm):
         ACC = ParameterFreeAGD()
 
         # Initialization
-        strong_FW_gap_out = compute_strong_FW_gap(
+        strong_wolfe_gap_out = compute_strong_wolfe_gap(
             point_initial, objective_function, feasible_region
         )
         iteration = 0
@@ -76,15 +66,22 @@ class ParameterFreeLaCG(_AbstractAlgorithm):
             duration,
             f_val,
             0.0,  # TODO: Fix or remove dummy dual gap
-            strong_FW_gap_out,
+            strong_wolfe_gap_out,
         )
         run_history = [run_status]
+        LOGGER.info(
+            "Running PFLaCG: "
+            "iteration = {1}, duration = {2:.{0}f}, "
+            "f_val = {3:.{0}f}, dual_gap = {4:.{0}f}, SWG = {5:.{0}f}".format(
+                DISPLAY_DECIMALS, *run_status
+            )
+        )
 
         point_x_FAFW = point_initial
         point_x_ACC = point_initial
         active_set_ACC = point_initial.support
-        strong_FW_gap_FAFW = strong_FW_gap_out
-        strong_FW_gap_ACC = strong_FW_gap_out
+        strong_wolfe_gap_FAFW = strong_wolfe_gap_out
+        strong_wolfe_gap_ACC = strong_wolfe_gap_out
         eta = None
         sigma = None
 
@@ -109,7 +106,7 @@ class ParameterFreeLaCG(_AbstractAlgorithm):
         ACC_process_started = False
         while not exit_criterion.has_met_exit_criterion(run_status):
             # Set halving strong Wolfe gap
-            target_accuracy = strong_FW_gap_FAFW * self.ratio
+            target_accuracy = strong_wolfe_gap_FAFW * self.ratio
             LOGGER.info(f"SWG target accuracy = {target_accuracy}")
             num_halvings += 1
 
@@ -127,6 +124,7 @@ class ParameterFreeLaCG(_AbstractAlgorithm):
                 ret_x_barycentric_coordinates[:] = point_x_ACC.barycentric_coordinates[
                     :
                 ]
+                ret_x_cartesian_coordinates[:] = point_x_ACC.cartesian_coordinates[:]
 
                 shared_buffers_dict = {
                     "buffer_lock": buffer_lock,
@@ -201,18 +199,20 @@ class ParameterFreeLaCG(_AbstractAlgorithm):
             buffer_lock.release()
 
             # Compute Strong Wolfe gap (or dual gap)
-            strong_FW_gap_ACC_prev = strong_FW_gap_ACC
-            strong_FW_gap_ACC = compute_strong_FW_gap(
+            strong_wolfe_gap_ACC_prev = strong_wolfe_gap_ACC
+            strong_wolfe_gap_ACC = compute_strong_wolfe_gap(
                 point_x_ACC, objective_function, feasible_region
             )
-            strong_FW_gap_FAFW = compute_strong_FW_gap(
+            strong_wolfe_gap_FAFW = compute_strong_wolfe_gap(
                 point_x_FAFW, objective_function, feasible_region
             )
             assert (
-                strong_FW_gap_FAFW <= target_accuracy
+                strong_wolfe_gap_FAFW <= target_accuracy
             )  # TODO: remove this after debugging.
 
-            if strong_FW_gap_FAFW <= min(strong_FW_gap_ACC, strong_FW_gap_ACC_prev / 2):
+            if strong_wolfe_gap_FAFW <= min(
+                strong_wolfe_gap_ACC, strong_wolfe_gap_ACC_prev / 2
+            ):
                 # Terminate ACC process and set restart flag
                 LOGGER.info("FAFW did better")
                 if ACC_process_started and ACC_process.is_alive():
@@ -227,11 +227,11 @@ class ParameterFreeLaCG(_AbstractAlgorithm):
 
                 ACC_restart_flag = True
                 point_x_ACC = point_x_FAFW
-                active_set_ACC = point_x_ACC.support
+                active_set_ACC = point_x_FAFW.support
 
                 # Set output points
                 point_x_out = point_x_FAFW
-                strong_FW_gap_out = strong_FW_gap_FAFW
+                strong_wolfe_gap_out = strong_wolfe_gap_FAFW
             else:
                 LOGGER.info("ACC did better")
                 LOGGER.info("Not terminating ACC")
@@ -242,11 +242,11 @@ class ParameterFreeLaCG(_AbstractAlgorithm):
                 if len(point_x_ACC.support) <= len(point_x_FAFW.support):
                     LOGGER.info("FAFW <- ACC")
                     point_x_FAFW = point_x_ACC
-                    strong_FW_gap_FAFW = strong_FW_gap_ACC
+                    strong_wolfe_gap_FAFW = strong_wolfe_gap_ACC
 
                 # Set output points
                 point_x_out = point_x_ACC
-                strong_FW_gap_out = strong_FW_gap_ACC
+                strong_wolfe_gap_out = strong_wolfe_gap_ACC
 
             # Append output points
             LOGGER.info("Outputting")
@@ -259,11 +259,12 @@ class ParameterFreeLaCG(_AbstractAlgorithm):
                 duration,
                 f_val,
                 0.0,  # TODO: Fix or remove dummy dual gap
-                strong_FW_gap_out,
+                strong_wolfe_gap_out,
             )
             LOGGER.info(
                 "Running PFLaCG: "
-                "iteration = {1}, duration = {2:.{0}f}, f_val = {3:.{0}f}, dual_gap = {4:.{0}f}".format(
+                "iteration = {1}, duration = {2:.{0}f},"
+                " f_val = {3:.{0}f}, dual_gap = {4:.{0}f}, SWG = {5:.{0}f}".format(
                     DISPLAY_DECIMALS, *run_status
                 )
             )
@@ -737,7 +738,6 @@ class FractionalAwayStepFW:
         ), "Wrong variant supplied to the adaptive algorithm"
         self.ratio = 0.5
         self.fw_variant = fw_variant
-        pass
 
     # Use AFW algorithm to halve the strong Wolfe gap until it is below a given tolerance.
     def run(
@@ -751,19 +751,11 @@ class FractionalAwayStepFW:
         if target_accuracy is None:
             grad = objective_function.evaluate_grad(point_initial.cartesian_coordinates)
             v = feasible_region.lp_oracle(grad)
-            point_a, indexMax = feasible_region.away_oracle(grad, point_initial)
-            # a, indexMax = feasible_region.away_oracle(grad, active_set)
-            strong_FW_gap = np.dot(grad, point_a.cartesian_coordinates - v)
-            target_accuracy = strong_FW_gap * self.ratio
-
-        # print("Before: ", strong_FW_gap)
-
-        from pflacg.algorithms.fw_variants import FrankWolfe
+            point_a, index_max = feasible_region.away_oracle(grad, point_initial)
+            strong_wolfe_gap = np.dot(grad, point_a.cartesian_coordinates - v)
+            target_accuracy = strong_wolfe_gap * self.ratio
 
         fw_algorithm = FrankWolfe(self.fw_variant, "line_search")
-
-        from pflacg.algorithms._algorithms_utils import ExitCriterion
-
         exit_criterion = ExitCriterion("SWG", target_accuracy)
         point_out = fw_algorithm.run(
             objective_function,
@@ -773,7 +765,4 @@ class FractionalAwayStepFW:
             save_and_output_results=False,
             global_iter=global_iter,
         )
-
-        # print("After: ", compute_strong_FW_gap(point_out, objective_function, feasible_region))
-        # print("Sufficient decrease?  ", compute_strong_FW_gap(point_out, objective_function, feasible_region) < target_accuracy)
         return point_out

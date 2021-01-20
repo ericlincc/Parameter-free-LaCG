@@ -241,6 +241,21 @@ class ExitCriterion:
 # Helper functions
 
 
+def compute_wolfe_gap(point_x, objective_function, feasible_region):
+    grad = objective_function.evaluate_grad(point_x.cartesian_coordinates)
+    v = feasible_region.lp_oracle(grad)
+    fw_gap = grad.dot(point_x.cartesian_coordinates - v)
+    return fw_gap
+
+
+def compute_strong_wolfe_gap(point_x, objective_function, feasible_region):
+    grad = objective_function.evaluate_grad(point_x.cartesian_coordinates)
+    v = feasible_region.lp_oracle(grad)
+    point_a, indexMax = feasible_region.away_oracle(grad, point_x)
+    strong_wolfe_gap = np.dot(grad, point_a.cartesian_coordinates - v)
+    return strong_wolfe_gap
+
+
 def line_search(self, grad, d, x):
     return -np.dot(grad, d) / np.dot(d, self.M.dot(d))
 
@@ -516,6 +531,8 @@ def accelerated_projected_gradient_descent(
     """
     from collections import deque
 
+    LOGGER.info("Calling argmin")
+
     # Quantities we want to output.
     L = f.largest_eigenvalue()
     mu = f.smallest_eigenvalue()
@@ -549,6 +566,9 @@ def accelerated_projected_gradient_descent(
         it_count += 1
         if time.time() - time_ref > time_limit or it_count > max_iteration:
             break
+        # LOGGER.info(f"fw_gap = {fw_gap}")
+        if np.isclose(fw_gap, gap_values[-1]) and fw_gap < 1e-13:
+            raise Exception("projection step is getting stuck")
         gap_values.append(fw_gap)
     w = np.zeros(len(active_set[0]))
     for i in range(len(active_set)):
@@ -561,8 +581,8 @@ class projection_objective_function:
     from scipy.sparse import issparse
 
     def __init__(self, Q, b, constant):
-        self.Q = Q.copy()
-        self.b = b.copy()
+        self.Q = Q.copy()  # TODO: Probably doesn't need to copy this Q
+        self.b = b.copy()  # TODO: Probably doesn't need to copy this b
         self.constant = constant
 
         from scipy.linalg import eigvalsh

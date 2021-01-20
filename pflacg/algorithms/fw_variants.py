@@ -112,13 +112,13 @@ class FrankWolfe(_AbstractAlgorithm):
         if self.fw_variant == "FW" or self.fw_variant == "DIPFW":
             strong_wolfe_gap = 0.0
         else:
-            a, indexMax = feasible_region.away_oracle(grad, x)
+            a, index_max = feasible_region.away_oracle(grad, x)
             strong_wolfe_gap = grad.dot(a.cartesian_coordinates - v)
 
         dual_gap = grad.dot(x.cartesian_coordinates - v)
 
         if self.fw_variant == "lazy" or self.fw_variant == "lazy quick exit":
-            phiVal = [dual_gap]
+            phi_val = [dual_gap]
 
         run_status = (iteration, duration, f_val, dual_gap, strong_wolfe_gap)
         if save_and_output_results:
@@ -154,23 +154,23 @@ class FrankWolfe(_AbstractAlgorithm):
                     self.step_size_param,
                 )
             if self.fw_variant == "lazy":
-                x, dual_gap_prev, strong_wolfe_gap_prev = FW_away_lazy(
+                x, dual_gap_prev, strong_wolfe_gap_prev = fw_away_lazy(
                     objective_function,
                     feasible_region,
                     x,
                     self.step_size_param,
-                    phiVal,
+                    phi_val,
                 )
             # if self.fw_variant == "lazy quick exit":
-            #     x, dual_gap, strong_wolfe_gap = FW_away_lazy_quick_exit(
+            #     x, dual_gap, strong_wolfe_gap = fw_away_lazy_quick_exit(
             #         objective_function,
             #         feasible_region,
             #         x,
             #         self.step_size_param,
-            #         phiVal,
+            #         phi_val,
             #     )
             if self.fw_variant == "DIPFW":
-                x, dual_gap_prev, strong_wolfe_gap_prev = DIPFW(
+                x, dual_gap_prev, strong_wolfe_gap_prev = dipfw(
                     objective_function, feasible_region, x, self.step_size_param
                 )
             iteration += 1
@@ -192,7 +192,8 @@ class FrankWolfe(_AbstractAlgorithm):
             if save_and_output_results:
                 LOGGER.info(
                     "Running " + str(self.fw_variant) + ": "
-                    "iteration = {1}, duration = {2:.{0}f}, f_val = {3:.{0}f}, dual_gap = {4:.{0}f}, strong_wolfe_gap = {5:.{0}f}".format(
+                    "iteration = {1}, duration = {2:.{0}f}, "
+                    "f_val = {3:.{0}f}, dual_gap = {4:.{0}f}, strong_wolfe_gap = {5:.{0}f}".format(
                         DISPLAY_DECIMALS, *run_status
                     )
                 )
@@ -208,18 +209,18 @@ class FrankWolfe(_AbstractAlgorithm):
 def step_fw(objective_function, feasible_region, point_x, step_size_param):
     grad = objective_function.evaluate_grad(point_x.cartesian_coordinates)
     v = feasible_region.lp_oracle(grad)
-    FWGap = grad.dot(point_x.cartesian_coordinates - v)
+    wolfe_gap = grad.dot(point_x.cartesian_coordinates - v)
     d = v - point_x.cartesian_coordinates
-    alphaMax = 1.0
+    alpha_max = 1.0
     alpha = step_size(
         objective_function,
         point_x.cartesian_coordinates,
         d,
         grad,
-        alphaMax,
+        alpha_max,
         step_size_param,
     )
-    if alpha != alphaMax:
+    if alpha != alpha_max:
         flag, point_v = point_x.is_vertex_in_support(v)
         if flag == False:
             new_barycentric_coordinates = list(point_x.barycentric_coordinates)
@@ -229,28 +230,30 @@ def step_fw(objective_function, feasible_region, point_x, step_size_param):
                 tuple(new_barycentric_coordinates),
                 point_v.support,
             )
-        return point_x + alpha * (point_v - point_x), FWGap, 0.0
+        return point_x + alpha * (point_v - point_x), wolfe_gap, 0.0
     else:
-        return Point(v, (1.0,), (v,)), FWGap, 0.0
+        return Point(v, (1.0,), (v,)), wolfe_gap, 0.0
 
 
 def away_step_fw(objective_function, feasible_region, point_x, step_size_param):
     grad = objective_function.evaluate_grad(point_x.cartesian_coordinates)
     v = feasible_region.lp_oracle(grad)
-    point_a, indexMax = feasible_region.away_oracle(grad, point_x)
-    FWGap = grad.dot(point_x.cartesian_coordinates - v)
-    StrongFWGap = grad.dot(point_a.cartesian_coordinates - v)
-    if FWGap > grad.dot(point_a.cartesian_coordinates - point_x.cartesian_coordinates):
-        alphaMax = 1.0
+    point_a, index_max = feasible_region.away_oracle(grad, point_x)
+    wolfe_gap = grad.dot(point_x.cartesian_coordinates - v)
+    strong_wolfe_gap = grad.dot(point_a.cartesian_coordinates - v)
+    if wolfe_gap > grad.dot(
+        point_a.cartesian_coordinates - point_x.cartesian_coordinates
+    ):
+        alpha_max = 1.0
         alpha = step_size(
             objective_function,
             point_x.cartesian_coordinates,
             v - point_x.cartesian_coordinates,
             grad,
-            alphaMax,
+            alpha_max,
             step_size_param,
         )
-        if alpha != alphaMax:
+        if alpha != alpha_max:
             flag, point_v = point_x.is_vertex_in_support(v)
             if flag == False:
                 new_barycentric_coordinates = list(point_x.barycentric_coordinates)
@@ -260,41 +263,41 @@ def away_step_fw(objective_function, feasible_region, point_x, step_size_param):
                     tuple(new_barycentric_coordinates),
                     point_v.support,
                 )
-            return point_x + alpha * (point_v - point_x), FWGap, StrongFWGap
+            return point_x + alpha * (point_v - point_x), wolfe_gap, strong_wolfe_gap
         else:
-            return Point(v, (1.0,), (v,)), FWGap, StrongFWGap
+            return Point(v, (1.0,), (v,)), wolfe_gap, strong_wolfe_gap
     else:
-        alphaMax = point_x.barycentric_coordinates[indexMax] / (
-            1.0 - point_x.barycentric_coordinates[indexMax]
+        alpha_max = point_x.barycentric_coordinates[index_max] / (
+            1.0 - point_x.barycentric_coordinates[index_max]
         )
         alpha = step_size(
             objective_function,
             point_x.cartesian_coordinates,
             point_x.cartesian_coordinates - point_a.cartesian_coordinates,
             grad,
-            alphaMax,
+            alpha_max,
             step_size_param,
         )
         point_x = point_x + alpha * (point_x - point_a)
-        if alpha == alphaMax:
-            point_x = point_x.delete_vertex_in_support(indexMax)
-        return point_x, FWGap, StrongFWGap
+        if alpha == alpha_max:
+            point_x = point_x.delete_vertex_in_support(index_max)
+        return point_x, wolfe_gap, strong_wolfe_gap
 
 
 def pairwise_step_fw(objective_function, feasible_region, point_x, step_size_param):
     grad = objective_function.evaluate_grad(point_x.cartesian_coordinates)
     v = feasible_region.lp_oracle(grad)
-    FW_gap = grad.dot(point_x.cartesian_coordinates - v)
-    point_a, indexMax = feasible_region.away_oracle(grad, point_x)
-    StrongWolfe_gap = grad.dot(point_a.cartesian_coordinates - v)
+    wolfe_gap = grad.dot(point_x.cartesian_coordinates - v)
+    point_a, index_max = feasible_region.away_oracle(grad, point_x)
+    strong_wolfe_gap = grad.dot(point_a.cartesian_coordinates - v)
     # Find the weight of the extreme point a in the decomposition.
-    alphaMax = point_x.barycentric_coordinates[indexMax]
+    alpha_max = point_x.barycentric_coordinates[index_max]
     alpha = step_size(
         objective_function,
         point_x.cartesian_coordinates,
         v - point_a.cartesian_coordinates,
         grad,
-        alphaMax,
+        alpha_max,
         step_size_param,
     )
     flag, point_v = point_x.is_vertex_in_support(v)
@@ -314,12 +317,12 @@ def pairwise_step_fw(objective_function, feasible_region, point_x, step_size_par
             point_v.support,
         )
     point_x = point_x + alpha * (point_v - point_a)
-    if alpha == alphaMax:
-        point_x = point_x.delete_vertex_in_support(indexMax)
-    return point_x, FW_gap, StrongWolfe_gap
+    if alpha == alpha_max:
+        point_x = point_x.delete_vertex_in_support(index_max)
+    return point_x, wolfe_gap, strong_wolfe_gap
 
 
-def DIPFW(objective_function, feasible_region, point_x, step_size_param):
+def dipfw(objective_function, feasible_region, point_x, step_size_param):
     grad = objective_function.evaluate_grad(point_x.cartesian_coordinates)
     v = feasible_region.lp_oracle(grad)
     grad_aux = grad.copy()
@@ -328,7 +331,7 @@ def DIPFW(objective_function, feasible_region, point_x, step_size_param):
             grad_aux[i] = -1.0e15
     a = feasible_region.lp_oracle(-grad_aux)
     d = v - a
-    alphaMax = calculate_stepsize(point_x.cartesian_coordinates, d)
+    alpha_max = calculate_stepsize(point_x.cartesian_coordinates, d)
     assert (
         step_size_param["type_step"] == "line_search"
     ), "DIPFW only accepts exact linesearch."
@@ -337,7 +340,7 @@ def DIPFW(objective_function, feasible_region, point_x, step_size_param):
         point_x.cartesian_coordinates,
         d,
         grad,
-        alphaMax,
+        alpha_max,
         step_size_param,
     )
     new_cartesian = point_x.cartesian_coordinates + alpha * d
@@ -348,28 +351,28 @@ def DIPFW(objective_function, feasible_region, point_x, step_size_param):
     )
 
 
-def FW_away_lazy(
-    objective_function, feasible_region, point_x, step_size_param, phiVal, K=2.0
+def fw_away_lazy(
+    objective_function, feasible_region, point_x, step_size_param, phi_val, K=2.0
 ):
     grad = objective_function.evaluate_grad(point_x.cartesian_coordinates)
-    point_a, indexMax, point_v, indexMin = point_x.max_min_vertex(grad)
+    point_a, index_max, point_v, indexMin = point_x.max_min_vertex(grad)
     # Use old FW vertex.
     if (
         np.dot(grad, point_x.cartesian_coordinates - point_v.cartesian_coordinates)
         >= np.dot(grad, point_a.cartesian_coordinates - point_x.cartesian_coordinates)
         and np.dot(grad, point_x.cartesian_coordinates - point_v.cartesian_coordinates)
-        >= phiVal[0] / K
+        >= phi_val[0] / K
     ):
-        alphaMax = 1.0
+        alpha_max = 1.0
         alpha = step_size(
             objective_function,
             point_x.cartesian_coordinates,
             point_v.cartesian_coordinates - point_x.cartesian_coordinates,
             grad,
-            alphaMax,
+            alpha_max,
             step_size_param,
         )
-        if alpha != alphaMax:
+        if alpha != alpha_max:
             return (
                 point_x + alpha * (point_v - point_x),
                 grad.dot(point_x.cartesian_coordinates - point_v.cartesian_coordinates),
@@ -390,22 +393,22 @@ def FW_away_lazy(
             and np.dot(
                 grad, point_a.cartesian_coordinates - point_x.cartesian_coordinates
             )
-            >= phiVal[0] / K
+            >= phi_val[0] / K
         ):
-            alphaMax = point_x.barycentric_coordinates[indexMax] / (
-                1.0 - point_x.barycentric_coordinates[indexMax]
+            alpha_max = point_x.barycentric_coordinates[index_max] / (
+                1.0 - point_x.barycentric_coordinates[index_max]
             )
             alpha = step_size(
                 objective_function,
                 point_x.cartesian_coordinates,
                 point_x.cartesian_coordinates - point_a.cartesian_coordinates,
                 grad,
-                alphaMax,
+                alpha_max,
                 step_size_param,
             )
             point_x = point_x + alpha * (point_x - point_a)
-            if alpha == alphaMax:
-                point_x = point_x.delete_vertex_in_support(indexMax)
+            if alpha == alpha_max:
+                point_x = point_x.delete_vertex_in_support(index_max)
             return (
                 point_x,
                 grad.dot(point_x.cartesian_coordinates - point_v.cartesian_coordinates),
@@ -413,15 +416,15 @@ def FW_away_lazy(
             )
         else:
             v = feasible_region.lp_oracle(grad)
-            if np.dot(grad, point_x.cartesian_coordinates - v) >= phiVal[0] / K:
+            if np.dot(grad, point_x.cartesian_coordinates - v) >= phi_val[0] / K:
                 flag, point_v = point_x.is_vertex_in_support(v)
-                alphaMax = 1.0
+                alpha_max = 1.0
                 alpha = step_size(
                     objective_function,
                     point_x.cartesian_coordinates,
                     point_v.cartesian_coordinates - point_x.cartesian_coordinates,
                     grad,
-                    alphaMax,
+                    alpha_max,
                     step_size_param,
                 )
                 if flag == False:
@@ -432,7 +435,7 @@ def FW_away_lazy(
                         tuple(new_barycentric_coordinates),
                         point_v.support,
                     )
-                if alpha != alphaMax:
+                if alpha != alpha_max:
                     return (
                         point_x + alpha * (point_v - point_x),
                         grad.dot(
@@ -451,7 +454,7 @@ def FW_away_lazy(
                         0.0,
                     )
             else:
-                phiVal[0] = min(
-                    grad.dot(point_x.cartesian_coordinates - v), phiVal[0] / 2.0
+                phi_val[0] = min(
+                    grad.dot(point_x.cartesian_coordinates - v), phi_val[0] / 2.0
                 )
                 return point_x, grad.dot(point_x.cartesian_coordinates - v), 0.0

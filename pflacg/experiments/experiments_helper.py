@@ -32,6 +32,7 @@ def max_vertex(grad, point):
     barycentric[max_ind] = 1.0
     return Point(point.support[max_ind], barycentric, point.support), max_ind
 
+
 def max_vertex_old(grad, active_vertex):
     """Iterate over current active set and return vertex with greatest inner product."""
     max_prod = np.dot(active_vertex[0], grad)
@@ -43,11 +44,10 @@ def max_vertex_old(grad, active_vertex):
     return active_vertex[max_ind], max_ind
 
 
-
 def generate_random_graph(n, p):
     """
     Randamly generate graph.
-    
+
     Paremeters
     ----------
     p: float

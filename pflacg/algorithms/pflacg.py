@@ -34,7 +34,8 @@ def compute_strong_FW_gap(point_x, objective_function, feasible_region):
     v = feasible_region.lp_oracle(grad)
     point_a, indexMax = feasible_region.away_oracle(grad, point_x)
     strong_FW_gap = np.dot(grad, point_a.cartesian_coordinates - v)
-    return strong_FW_gap
+    FW_gap = np.dot(grad, point_x.cartesian_coordinates - v)
+    return strong_FW_gap, FW_gap
 
 
 # Algorithms
@@ -63,7 +64,7 @@ class ParameterFreeLaCG(_AbstractAlgorithm):
         ACC = ParameterFreeAGD()
 
         # Initialization
-        strong_FW_gap_out = compute_strong_FW_gap(
+        strong_FW_gap_out, FW_gap = compute_strong_FW_gap(
             point_initial, objective_function, feasible_region
         )
         iteration = 0
@@ -75,7 +76,7 @@ class ParameterFreeLaCG(_AbstractAlgorithm):
             iteration,
             duration,
             f_val,
-            0.0,  # TODO: Fix or remove dummy dual gap
+            FW_gap,
             strong_FW_gap_out,
         )
         run_history = [run_status]
@@ -202,10 +203,10 @@ class ParameterFreeLaCG(_AbstractAlgorithm):
 
             # Compute Strong Wolfe gap (or dual gap)
             strong_FW_gap_ACC_prev = strong_FW_gap_ACC
-            strong_FW_gap_ACC = compute_strong_FW_gap(
+            strong_FW_gap_ACC, _ = compute_strong_FW_gap(
                 point_x_ACC, objective_function, feasible_region
             )
-            strong_FW_gap_FAFW = compute_strong_FW_gap(
+            strong_FW_gap_FAFW, _ = compute_strong_FW_gap(
                 point_x_FAFW, objective_function, feasible_region
             )
             assert (

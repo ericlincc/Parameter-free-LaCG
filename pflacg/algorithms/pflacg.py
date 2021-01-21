@@ -13,6 +13,9 @@ from pflacg.algorithms._abstract_algorithm import _AbstractAlgorithm
 from pflacg.algorithms._algorithms_utils import *  # TODO: Import only the methods and classes we need
 from pflacg.experiments.feasible_regions import ConvexHull
 from pflacg.algorithms.fw_variants import FrankWolfe
+from pflacg.algorithms.project_onto_active_set_jit import (
+    accelerated_projected_gradient_descent_over_simplex_jit,
+)
 
 
 logging.basicConfig(
@@ -24,7 +27,7 @@ LOGGER = logging.getLogger()
 
 
 WAIT_TIME_FOR_LOCK = 0.2
-MAX_NUM_WAIT_INTERVALS = 600
+MAX_NUM_WAIT_INTERVALS = 3000
 
 
 # Algorithms
@@ -40,6 +43,8 @@ class ParameterFreeLaCG(_AbstractAlgorithm):
         self.fw_variant = fw_variant
         self.ratio = 0.5
         self.iter_sync = iter_sync
+        self.FAFW = FractionalAwayStepFW(fw_variant=self.fw_variant, ratio=self.ratio)
+        self.ACC = ACC = ParameterFreeAGD()
 
     def run(
         self,
@@ -48,9 +53,6 @@ class ParameterFreeLaCG(_AbstractAlgorithm):
         exit_criterion,
         point_initial,
     ):
-
-        FAFW = FractionalAwayStepFW(fw_variant=self.fw_variant, ratio=self.ratio)
-        ACC = ParameterFreeAGD()
 
         # Initialization
         strong_wolfe_gap_out = compute_strong_wolfe_gap(
@@ -139,7 +141,7 @@ class ParameterFreeLaCG(_AbstractAlgorithm):
                 LOGGER.info(f"Creating ACC process with set size {len(active_set_ACC)}")
                 convex_hull_ACC = ConvexHull(active_set_ACC)
                 ACC_process = Process(
-                    target=ACC.run,
+                    target=self.ACC.run,
                     args=(
                         objective_function,
                         convex_hull_ACC,
@@ -158,7 +160,7 @@ class ParameterFreeLaCG(_AbstractAlgorithm):
 
             LOGGER.info("Running FAFW")
             # Run FAFW and wait for the output
-            point_x_FAFW = FAFW.run(
+            point_x_FAFW = self.FAFW.run(
                 objective_function,
                 feasible_region,
                 point_x_FAFW,
@@ -294,7 +296,7 @@ class ParameterFreeAGD:
         initial_sigma=None,
         shared_buffers_dict=None,
         last_restart_iter=0,
-        epsilon_f=1e-4,
+        epsilon_f=1e-2,
     ):
         """Run PF-ACC given an initial point and an active set/feasible region.
 
@@ -332,6 +334,8 @@ class ParameterFreeAGD:
             global_iter = shared_buffers_dict["global_iter"]
             ACC_paused_flag = shared_buffers_dict["ACC_paused_flag"]
             buffer_lock = shared_buffers_dict["buffer_lock"]
+        else:
+            global_eta, global_sigma = None, None
 
         # Initializtion
         point_x = point_initial
@@ -375,12 +379,14 @@ class ParameterFreeAGD:
         wolfe_gap = compute_wolfe_gap(point_x, objective_function, feasible_region)
         if wolfe_gap <= epsilon_f:
             LOGGER.info("Early halting ACC with wolfe_gap <= epsilon_f")
-            buffer_lock.acquire()
-            global_eta.value = eta
-            global_sigma.value = sigma
-            buffer_lock.release()
+            if shared_buffers_dict:
+                buffer_lock.acquire()
+                global_eta.value = eta
+                global_sigma.value = sigma
+                buffer_lock.release()
             return point_x, eta, sigma, iteration
 
+        LOGGER.info("1st time argmin_quadratic_over_active_set")
         point_x_plus = argmin_quadratic_over_active_set(
             quadratic_coefficient=eta / 2.0,
             linear_vector=(
@@ -392,6 +398,7 @@ class ParameterFreeAGD:
             tolerance_type="gradient mapping",
             tolerance=eta / 32,
         )
+        LOGGER.info("1st time argmin_quadratic_over_active_set ended")
         grad_mapping = (
             point_x.cartesian_coordinates - point_x_plus.cartesian_coordinates
         )

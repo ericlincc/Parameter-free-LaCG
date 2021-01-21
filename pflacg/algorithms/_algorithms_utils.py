@@ -9,6 +9,11 @@ import numpy as np
 from scipy.sparse import csc_matrix
 
 
+from pflacg.algorithms.project_onto_active_set_jit import (
+    accelerated_projected_gradient_descent_over_simplex_jit,
+)
+
+
 logging.basicConfig(
     level=logging.INFO,
     format="%(levelname)s :: %(asctime)s :: %(message)s",
@@ -244,8 +249,8 @@ class ExitCriterion:
 def compute_wolfe_gap(point_x, objective_function, feasible_region):
     grad = objective_function.evaluate_grad(point_x.cartesian_coordinates)
     v = feasible_region.lp_oracle(grad)
-    fw_gap = grad.dot(point_x.cartesian_coordinates - v)
-    return fw_gap
+    wolfe_gap = grad.dot(point_x.cartesian_coordinates - v)
+    return wolfe_gap
 
 
 def compute_strong_wolfe_gap(point_x, objective_function, feasible_region):
@@ -365,7 +370,42 @@ def argmin_quadratic_over_active_set(
     reference_point,
     tolerance_type,
     tolerance,
+    time_limit=np.inf,
+    max_steps=np.inf,
+    use_numba=True,
 ):
+
+    LOGGER.info("Calling argmin")
+
+    if tolerance_type not in ["dual gap", "gradient mapping"]:
+        raise ValueError("tolerance_type must be either dual_gap or gradient_mapping")
+
+    if use_numba:
+        matrix = np.vstack(active_set)
+        quadratic = 2 * quadratic_coefficient * matrix.dot(matrix.T)
+        linear = matrix.dot(linear_vector)
+        constant = 0.0
+        barycentric_coordinates = (
+            accelerated_projected_gradient_descent_over_simplex_jit(
+                quadratic=quadratic,
+                linear=linear,
+                constant=constant,
+                active_set=active_set,
+                initial_x=np.array(
+                    reference_point.barycentric_coordinates
+                ),  # TODO: make sure that this is an np array
+                reference_point=np.array(reference_point.cartesian_coordinates),
+                tolerance_type=tolerance_type,
+                tolerance=tolerance,
+            )
+        )
+        if not barycentric_coordinates.any():
+            raise Exception("projection step is getting stuck")
+        cartesian_coordinates = np.zeros(len(active_set[0]))
+        for i in range(len(active_set)):
+            cartesian_coordinates += barycentric_coordinates[i] * active_set[i]
+        return Point(cartesian_coordinates, tuple(barycentric_coordinates), active_set)
+
     if tolerance_type == "dual gap":
         stopping_criterion = StoppingCriterion(
             tolerance=tolerance,
@@ -474,9 +514,9 @@ class StoppingCriterion:
         self.reference_point = reference_point
         self.coefficient = coefficient
 
-    def evaluate(self, x, FW_gap):
+    def evaluate(self, x, wolfe_gap):
         if self.tolerance is not None:
-            return self.tolerance < FW_gap
+            return self.tolerance < wolfe_gap
         else:
             active_set = self.reference_point.support
             w = np.zeros(len(active_set[0]))
@@ -485,7 +525,7 @@ class StoppingCriterion:
             return (
                 self.coefficient
                 * np.linalg.norm(w - self.reference_point.cartesian_coordinates) ** 2
-                < FW_gap
+                < wolfe_gap
             )
 
 
@@ -494,7 +534,7 @@ def accelerated_projected_gradient_descent(
     feasible_region,
     active_set,
     stopping_criterion,
-    alpha0,
+    initial_x,
     time_limit=60,
     max_iteration=100,
 ):
@@ -531,25 +571,22 @@ def accelerated_projected_gradient_descent(
         Outputted solution with primal gap below the target tolerance
     """
 
-    LOGGER.info("Calling argmin")
-
     # Quantities we want to output.
     L = f.largest_eigenvalue()
     mu = f.smallest_eigenvalue()
-    initial_point = alpha0
-    x = initial_point
-    y = initial_point
     q = mu / L
+    x = initial_x
+    y = initial_x
     if (mu < 1.0e-3) or q == 1:  # TODO: Alex check later
         alpha = 0
     else:
         alpha = np.sqrt(q)
     grad = f.evaluate_grad(x)
-    fw_gap = grad.dot(x - feasible_region.lp_oracle(grad))
+    wolfe_gap = grad.dot(x - feasible_region.lp_oracle(grad))
     time_ref = time.time()
     it_count = 0
 
-    while stopping_criterion.evaluate(x, fw_gap):
+    while stopping_criterion.evaluate(x, wolfe_gap):
         x_ = x
         x = feasible_region.projection(y - 1 / L * f.evaluate_grad(y))
         if (mu < 1.0e-3) or q == 1:  # TODO: Alex check later
@@ -565,13 +602,13 @@ def accelerated_projected_gradient_descent(
             beta = _alpha * (1 - _alpha) / (_alpha ** 2 - alpha)
         y = x + beta * (x - x_)
         grad = f.evaluate_grad(x)
-        _fw_gap = fw_gap
-        fw_gap = grad.dot(x - feasible_region.lp_oracle(grad))
+        _wolfe_gap = wolfe_gap
+        wolfe_gap = grad.dot(x - feasible_region.lp_oracle(grad))
         it_count += 1
         if time.time() - time_ref > time_limit or it_count > max_iteration:
             break
-        # LOGGER.info(f"fw_gap = {fw_gap}")
-        if np.isclose(fw_gap, _fw_gap) and fw_gap < 1e-13:
+        # LOGGER.info(f"wolfe_gap = {wolfe_gap}")
+        if np.isclose(wolfe_gap, _wolfe_gap) and wolfe_gap < 1e-13:
             raise Exception("projection step is getting stuck")
     w = np.zeros(len(active_set[0]))
     for i in range(len(active_set)):

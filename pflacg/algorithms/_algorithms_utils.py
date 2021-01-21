@@ -390,11 +390,11 @@ def argmin_quadratic_over_active_set(
                 quadratic=quadratic,
                 linear=linear,
                 constant=constant,
-                active_set=active_set,
+                active_set=matrix,
                 initial_x=np.array(
                     reference_point.barycentric_coordinates
                 ),  # TODO: make sure that this is an np array
-                reference_point=np.array(reference_point.cartesian_coordinates),
+                reference_x=np.array(reference_point.cartesian_coordinates),
                 tolerance_type=tolerance_type,
                 tolerance=tolerance,
             )

@@ -17,7 +17,7 @@ def accelerated_projected_gradient_descent_over_simplex_jit(
     constant,
     active_set,
     initial_x,
-    reference_point,
+    reference_x,
     tolerance_type,
     tolerance,
 ):
@@ -29,15 +29,15 @@ def accelerated_projected_gradient_descent_over_simplex_jit(
         return quadratic.dot(x) + linear
 
     def has_met_stopping_criterion(
-        x, wolfe_gap, active_set, reference_point, tolerance_type, tolerance
+        x, wolfe_gap, active_set, reference_x, tolerance_type, tolerance
     ):
         if tolerance_type == "dual gap":
             return wolfe_gap <= tolerance
         elif tolerance_type == "gradient mapping":
-            w = np.zeros(len(active_set[0]))
-            for i in range(len(active_set)):
+            w = np.zeros(active_set.shape[1])
+            for i in range(active_set.shape[0]):
                 w += x[i] * active_set[i]
-            return wolfe_gap <= tolerance * np.linalg.norm(w - reference_point) ** 2
+            return wolfe_gap <= tolerance * np.linalg.norm(w - reference_x) ** 2
         else:
             return True
 
@@ -74,7 +74,7 @@ def accelerated_projected_gradient_descent_over_simplex_jit(
     wolfe_gap = grad.dot(x - simplex_lp_oracle(grad))
 
     while not has_met_stopping_criterion(
-        x, wolfe_gap, active_set, reference_point, tolerance_type, tolerance
+        x, wolfe_gap, active_set, reference_x, tolerance_type, tolerance
     ):
         x_ = x
         x = simplex_projection(

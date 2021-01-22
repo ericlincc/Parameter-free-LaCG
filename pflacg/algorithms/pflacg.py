@@ -104,25 +104,6 @@ class ParameterFreeLaCG(_AbstractAlgorithm):
         buffer_lock = Lock()
         global_iter = Value("i", 0)
 
-        # Attempting to force one execution of ACC.run first
-        # v1 = np.zeros(objective_function.dim)
-        # v2 = np.zeros(objective_function.dim)
-        # v1[0] = 1.
-        # v2[1] = 1.
-        # active_set = (v1, v2)
-        # convex_hull = ConvexHull(active_set)
-        # _ = self.ACC.run(
-        #     objective_function,
-        #     convex_hull,
-        #     Point(v1, (1., 0.), active_set),
-        #     1e-10,
-        #     eta,
-        #     sigma,
-        #     None,
-        #     iteration,
-        # )
-
-
         ACC_restart_flag = True
         ACC_process_started = False
         while not exit_criterion.has_met_exit_criterion(run_status):
@@ -315,7 +296,7 @@ class ParameterFreeAGD:
         initial_sigma=None,
         shared_buffers_dict=None,
         last_restart_iter=0,
-        epsilon_f=1e-4,
+        epsilon_f=1e-3,
     ):
         """Run PF-ACC given an initial point and an active set/feasible region.
 

@@ -1,8 +1,8 @@
 [
     {
-        "name" : "DICG",
+        "name" : "LazyFW",
         "class_name" : "FrankWolfe",
-        "args" : { "fw_variant" : "DIPFW",
+        "args" : { "fw_variant" : "lazy",
 				   "step_type" : "line_search"
         }
     }

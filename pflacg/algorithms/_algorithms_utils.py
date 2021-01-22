@@ -234,9 +234,15 @@ class ExitCriterion:
             return primal_gap < self.criterion_value
         elif self.criterion_type == "DG":
             #            LOGGER.info("Wolfe gap: {0}".format(dual_gap))
-            return dual_gap < self.criterion_value
+            if dual_gap is None:
+                return False
+            else:
+                return dual_gap < self.criterion_value
         elif self.criterion_type == "SWG":
-            return strong_wolfe_gap < self.criterion_value
+            if strong_wolfe_gap is None:
+                return False
+            else:
+                return strong_wolfe_gap < self.criterion_value
         elif self.criterion_type == "IT":
             return iteration >= self.criterion_value
         else:
@@ -577,7 +583,7 @@ def accelerated_projected_gradient_descent(
     q = mu / L
     x = initial_x
     y = initial_x
-    if (mu < 1.0e-3) or q == 1:  # TODO: Alex check later
+    if (mu < 1.0e-3) or q == 1:
         alpha = 0
     else:
         alpha = np.sqrt(q)
@@ -589,7 +595,7 @@ def accelerated_projected_gradient_descent(
     while stopping_criterion.evaluate(x, wolfe_gap):
         x_ = x
         x = feasible_region.projection(y - 1 / L * f.evaluate_grad(y))
-        if (mu < 1.0e-3) or q == 1:  # TODO: Alex check later
+        if (mu < 1.0e-3) or q == 1:
             alpha_ = alpha
             alpha = 0.5 * (1 + np.sqrt(1 + 4 * alpha_ * alpha_))
             beta = (alpha_ - 1.0) / alpha
@@ -607,7 +613,6 @@ def accelerated_projected_gradient_descent(
         it_count += 1
         if time.time() - time_ref > time_limit or it_count > max_iteration:
             break
-        # LOGGER.info(f"wolfe_gap = {wolfe_gap}")
         if np.isclose(wolfe_gap, _wolfe_gap) and wolfe_gap < 1e-13:
             raise Exception("projection step is getting stuck")
     w = np.zeros(len(active_set[0]))

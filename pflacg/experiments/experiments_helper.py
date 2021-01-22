@@ -13,10 +13,10 @@ from pflacg.algorithms._algorithms_utils import Point
 
 def fake_callback(model, where, value):
     """Callback function used to interface with Gurobi."""
-    ggEps = 1e-08
+    gg_eps = 1e-08
     if where == GRB.Callback.MIP:
-        objBnd = model.cbGet(GRB.Callback.MIP_OBJBND)
-        if objBnd >= value + ggEps:
+        obj_bnd = model.cbGet(GRB.Callback.MIP_OBJBND)
+        if obj_bnd >= value + gg_eps:
             pass
 
 
@@ -104,8 +104,8 @@ def construct_dictionary_indices(graph):
 
     # Construct a dictionary of the indices
     dictionary = {}
-    itCount = 0
+    iter_count = 0
     for i in graph.edges:
-        dictionary[i] = itCount
-        itCount += 1
+        dictionary[i] = iter_count
+        iter_count += 1
     return dictionary

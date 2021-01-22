@@ -97,6 +97,7 @@ def accelerated_projected_gradient_descent_over_simplex_jit(
         wolfe_gap = grad.dot(x - simplex_lp_oracle(grad))
 
         # Detecting if subproblem is stuck
-        if abs(wolfe_gap - _wolfe_gap) <= 1e-6 and wolfe_gap < 1e-12:
+        # TODO: Use moving average instead
+        if abs(wolfe_gap - _wolfe_gap) <= 1e-12 and wolfe_gap < 1e-11:
             return np.zeros(len(initial_x))
     return x

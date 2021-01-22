@@ -1,8 +1,8 @@
 [
     {
-        "name" : "DICG",
+        "name" : "PFW",
         "class_name" : "FrankWolfe",
-        "args" : { "fw_variant" : "DIPFW",
+        "args" : { "fw_variant" : "PFW",
 				   "step_type" : "line_search"
         }
     }

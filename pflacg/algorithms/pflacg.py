@@ -54,6 +54,20 @@ class ParameterFreeLaCG(_AbstractAlgorithm):
         point_initial,
     ):
 
+        ACC_process_overhead = {
+            "initialization" : 0.,
+            "init shared buffer creation" : 0.,
+            "ACC process creation" : 0.,
+            "acquiring buffer" : 0.,
+            "linear oracles" : 0.,
+            "ACC termination" : 0.,
+            "AFW_run": 0.,
+            "global_iter": 0.,
+            "logging": 0.,
+        }
+
+        s = time.time()  # <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
+
         # Initialization
         strong_wolfe_gap_out = compute_strong_wolfe_gap(
             point_initial, objective_function, feasible_region
@@ -87,6 +101,10 @@ class ParameterFreeLaCG(_AbstractAlgorithm):
         eta = None
         sigma = None
 
+        ACC_process_overhead["initialization"] += time.time() - s  # >>>>>>>>>>>>>>>>>>>>>>>>>>
+
+        s = time.time()  # <<<<<<<<<<<<<<<<<<<<<<<<<<
+
         # Create new shared memory buffers and buffer lock
         ret_x_cartesian_coordinates_shm = shared_memory.SharedMemory(
             create=True,
@@ -104,6 +122,8 @@ class ParameterFreeLaCG(_AbstractAlgorithm):
         buffer_lock = Lock()
         global_iter = Value("i", 0)
 
+        ACC_process_overhead["init shared buffer creation"] += time.time() - s  # >>>>>>>>>>>>>>>>>>>>>>
+
         ACC_restart_flag = True
         ACC_process_started = False
         while not exit_criterion.has_met_exit_criterion(run_status):
@@ -111,6 +131,8 @@ class ParameterFreeLaCG(_AbstractAlgorithm):
             target_accuracy = strong_wolfe_gap_FAFW * self.ratio
             LOGGER.info(f"SWG target accuracy = {target_accuracy}")
             num_halvings += 1
+
+            s = time.time()  # <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
 
             if ACC_restart_flag:
                 LOGGER.info("Restarting ACC")
@@ -158,6 +180,10 @@ class ParameterFreeLaCG(_AbstractAlgorithm):
                     ACC_process.start()
                     ACC_process_started = True
 
+            ACC_process_overhead["ACC process creation"] += time.time() - s  # >>>>>>>>>>>>>>>>>>>>>>
+
+
+            s = time.time()  # <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
             LOGGER.info("Running FAFW")
             # Run FAFW and wait for the output
             point_x_FAFW = self.FAFW.run(
@@ -167,9 +193,13 @@ class ParameterFreeLaCG(_AbstractAlgorithm):
                 target_accuracy=target_accuracy,
                 global_iter=global_iter,
             )
+            ACC_process_overhead["AFW_run"] += time.time() - s  # >>>>>>>>>>>>>>>>>>>>>>
+
+            s = time.time()  # <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
             with global_iter.get_lock():
                 _global_iter = global_iter.value
             LOGGER.info(f"FAFW returned at global_iter = {_global_iter}")
+            ACC_process_overhead["global_iter"] += time.time() - s  # >>>>>>>>>>>>>>>>>>>>>>
 
             # if iteration sync, need to wait for ACC to complete same #iterations
             num_wait_interval = 0
@@ -187,6 +217,8 @@ class ParameterFreeLaCG(_AbstractAlgorithm):
                         num_wait_interval <= MAX_NUM_WAIT_INTERVALS
                     )  # TODO: Remove after debugging
 
+            s = time.time()  # <<<<<<<<<<<<<<<<<<<<<<<<<<<
+
             LOGGER.info("Acquiring buffer")
             # retrieve the most recent output
             buffer_lock.acquire()
@@ -200,6 +232,10 @@ class ParameterFreeLaCG(_AbstractAlgorithm):
                 eta = global_eta.value
             buffer_lock.release()
 
+            ACC_process_overhead["acquiring buffer"] += time.time() - s  # >>>>>>>>>>>>>>>>>>>>>>
+
+            s = time.time()  # <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
+
             # Compute Strong Wolfe gap (or dual gap)
             strong_wolfe_gap_ACC_prev = strong_wolfe_gap_ACC
             strong_wolfe_gap_ACC = compute_strong_wolfe_gap(
@@ -208,6 +244,9 @@ class ParameterFreeLaCG(_AbstractAlgorithm):
             strong_wolfe_gap_FAFW = compute_strong_wolfe_gap(
                 point_x_FAFW, objective_function, feasible_region
             )
+
+            ACC_process_overhead["linear oracles"] += time.time() - s  # >>>>>>>>>>>>>>>>>>>>>>
+
             assert (
                 strong_wolfe_gap_FAFW <= target_accuracy
             )  # TODO: remove this after debugging.
@@ -215,6 +254,9 @@ class ParameterFreeLaCG(_AbstractAlgorithm):
             if strong_wolfe_gap_FAFW <= min(
                 strong_wolfe_gap_ACC, strong_wolfe_gap_ACC_prev / 2
             ):
+
+                s = time.time()  # <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
+
                 # Terminate ACC process and set restart flag
                 LOGGER.info("FAFW did better")
                 if ACC_process_started and ACC_process.is_alive():
@@ -226,6 +268,8 @@ class ParameterFreeLaCG(_AbstractAlgorithm):
                     ACC_paused_flag.value = 0
                 ret_x_barycentric_coordinates_shm.close()
                 ret_x_barycentric_coordinates_shm.unlink()
+
+                ACC_process_overhead["ACC termination"] += time.time() - s  # >>>>>>>>>>>>>>>>>>>>>>
 
                 ACC_restart_flag = True
                 point_x_ACC = point_x_FAFW
@@ -279,7 +323,7 @@ class ParameterFreeLaCG(_AbstractAlgorithm):
             ACC_process.terminate()
             ACC_process.join()
 
-        return run_history
+        return run_history, ACC_process_overhead
 
 
 class ParameterFreeAGD:
@@ -296,7 +340,7 @@ class ParameterFreeAGD:
         initial_sigma=None,
         shared_buffers_dict=None,
         last_restart_iter=0,
-        epsilon_f=1e-3,
+        epsilon_f=1e-4,
     ):
         """Run PF-ACC given an initial point and an active set/feasible region.
 

@@ -620,7 +620,6 @@ def accelerated_projected_gradient_descent(
         w += x[i] * active_set[i]
     return w, x.tolist()
 
-
 class projection_objective_function:
     import numpy as np
     from scipy.sparse import issparse

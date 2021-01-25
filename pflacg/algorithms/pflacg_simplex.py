@@ -11,11 +11,11 @@ import numpy as np
 from pflacg.experiments.objective_functions import RegularizedObjectiveFunction
 from pflacg.algorithms._abstract_algorithm import _AbstractAlgorithm
 from pflacg.algorithms._algorithms_utils import *  # TODO: Import only the methods and classes we need
-from pflacg.experiments.feasible_regions import ConvexHull
-from pflacg.algorithms.fw_variants import FrankWolfe
-from pflacg.algorithms.project_onto_active_set_jit import (
-    accelerated_projected_gradient_descent_over_simplex_jit,
-)
+from pflacg.experiments.feasible_regions import ConvexHull, ProbabilitySimplexPolytope
+from pflacg.algorithms.fw_variants import FrankWolfe_simplex
+# from pflacg.algorithms.project_onto_active_set_jit import (
+    # accelerated_projected_gradient_descent_over_simplex_jit,
+# )
 
 
 logging.basicConfig(
@@ -30,21 +30,86 @@ WAIT_TIME_FOR_LOCK = 0.2
 MAX_NUM_WAIT_INTERVALS = 3000
 
 
-# Algorithms
+def compute_strong_wolfe_gap_simplex(x, objective_function, feasible_region):
+    grad = objective_function.evaluate_grad(x)
+    v = feasible_region.lp_oracle(grad)
+    a, _ = feasible_region.away_oracle(grad, x)
+    strong_wolfe_gap = np.dot(grad, a - v)
+    wolfe_gap = grad.dot(x - v)
+    return strong_wolfe_gap, wolfe_gap
 
+def compute_wolfe_gap_simplex(x, objective_function, feasible_region):
+    grad = objective_function.evaluate_grad(x)
+    v = feasible_region.lp_oracle(grad)
+    wolfe_gap = grad.dot(x - v)
+    return wolfe_gap
 
-class ParameterFreeLaCG(_AbstractAlgorithm):
+def AwayOracle_reduced(grad, active_set_point):
+    aux = np.multiply(grad, np.sign(active_set_point))
+    indices = np.where(active_set_point > 0.0)[0]
+    v = np.zeros(len(active_set_point), dtype = float)
+    indexMax = indices[np.argmax(aux[indices])]
+    v[indexMax] = 1.0
+    return v, indexMax
+
+def LPOracle_reduced(grad, active_set_point):
+    aux = np.multiply(grad, np.sign(active_set_point))
+    indices = np.where(active_set_point > 0.0)[0]
+    v = np.zeros(len(active_set_point), dtype = float)
+    indexMin = indices[np.argmin(aux[indices])]
+    v[indexMin] = 1.0
+    return v
+
+def compute_strong_wolfe_gap_simplex_reduced(x, objective_function, active_set_point):
+    grad = objective_function.evaluate_grad(x)
+    v = LPOracle_reduced(grad, active_set_point)
+    a, _ = AwayOracle_reduced(grad, x)
+    strong_wolfe_gap = np.dot(grad, a - v)
+    wolfe_gap = np.dot(grad, x - v)
+    return strong_wolfe_gap, wolfe_gap
+
+def compute_wolfe_gap_simplex_reduced(x, objective_function, active_set_point):
+    grad = objective_function.evaluate_grad(x)
+    v = LPOracle_reduced(grad, active_set_point)
+    wolfe_gap = np.dot(grad, x - v)
+    return wolfe_gap
+
+def argmin_quadratic_over_active_set_simplex(
+    quadratic_coefficient,
+    linear_vector,
+    active_set_point,
+):
+    LOGGER.info("Calling argmin")
+    indices = np.where(active_set_point > 0.0)[0]
+    aux = project_simplex(-linear_vector[indices]/(2.0*quadratic_coefficient))
+    output_point = np.zeros(len(active_set_point))
+    output_point[indices] = aux
+    return output_point
+
+def project_simplex(x):
+    (n,) = x.shape
+    if x.sum() == 1.0 and np.alltrue(x >= 0):
+        return x
+    v = x - np.max(x)
+    u = np.sort(v)[::-1]
+    cssv = np.cumsum(u)
+    rho = np.count_nonzero(u * np.arange(1, n + 1) > (cssv - 1.0)) - 1
+    theta = float(cssv[rho] - 1.0) / (rho + 1)
+    w = (v - theta).clip(min=0)
+    return w
+
+class ParameterFreeLaCG_simplex(_AbstractAlgorithm):
     def __init__(
         self,
-        fw_variant="AFW",
+        fw_variant="PFW",
         ratio=0.5,
         iter_sync=True,
     ):
         self.fw_variant = fw_variant
         self.ratio = 0.5
         self.iter_sync = iter_sync
-        self.FAFW = FractionalAwayStepFW(fw_variant=self.fw_variant, ratio=self.ratio)
-        self.ACC = ACC = ParameterFreeAGD()
+        self.FAFW = FractionalAwayStepFW_simplex(fw_variant=self.fw_variant, ratio=self.ratio)
+        self.ACC = ACC = ParameterFreeAGD_simplex()
 
     def run(
         self,
@@ -54,20 +119,21 @@ class ParameterFreeLaCG(_AbstractAlgorithm):
         point_initial,
     ):
 
+        active_set_reference_point = np.ones(len(point_initial))/point_initial
         # Initialization
-        strong_wolfe_gap_out = compute_strong_wolfe_gap(
-            point_initial, objective_function, feasible_region
+        strong_wolfe_gap_out, wolfe_gap_out = compute_strong_wolfe_gap_simplex_reduced(
+            point_initial, objective_function, active_set_reference_point
         )
         iteration = 0
         start_time = time.time()
         duration = 0.0
         num_halvings = 0
-        f_val = objective_function.evaluate(point_initial.cartesian_coordinates)
+        f_val = objective_function.evaluate(point_initial)
         run_status = (
             iteration,
             duration,
             f_val,
-            0.0,  # TODO: Fix or remove dummy dual gap
+            wolfe_gap_out,  # TODO: Fix or remove dummy dual gap
             strong_wolfe_gap_out,
         )
         run_history = [run_status]
@@ -79,9 +145,9 @@ class ParameterFreeLaCG(_AbstractAlgorithm):
             )
         )
 
-        point_x_FAFW = point_initial
-        point_x_ACC = point_initial
-        active_set_ACC = point_initial.support
+        x_FAFW = point_initial
+        x_ACC = point_initial
+        # active_set_ACC = point_initial.support
         strong_wolfe_gap_FAFW = strong_wolfe_gap_out
         strong_wolfe_gap_ACC = strong_wolfe_gap_out
         eta = None
@@ -97,7 +163,7 @@ class ParameterFreeLaCG(_AbstractAlgorithm):
             dtype=np.float64,
             buffer=ret_x_cartesian_coordinates_shm.buf,
         )
-        ret_x_cartesian_coordinates[:] = point_x_ACC.cartesian_coordinates[:]
+        ret_x_cartesian_coordinates[:] = x_ACC[:]
         global_eta = Value("d", 0)
         global_sigma = Value("d", 0)
         ACC_paused_flag = Value("i", 0)
@@ -113,20 +179,30 @@ class ParameterFreeLaCG(_AbstractAlgorithm):
             num_halvings += 1
 
             if ACC_restart_flag:
+                
+                # strong_wolfe_gap_ACC_before = compute_strong_wolfe_gap_simplex(
+                #     x_ACC, objective_function, feasible_region
+                # )
+                # strong_wolfe_gap_FAFW_before = compute_strong_wolfe_gap_simplex(
+                #     x_FAFW, objective_function, feasible_region
+                # )
+                # LOGGER.info(f"FAFW SWG before = {strong_wolfe_gap_FAFW_before}")
+                # LOGGER.info(f"ACC SWG before = {strong_wolfe_gap_ACC_before}")
+                
                 LOGGER.info("Restarting ACC")
-                ret_x_barycentric_coordinates_shm = shared_memory.SharedMemory(
-                    create=True,
-                    size=np.zeros(shape=len(active_set_ACC), dtype=np.float64).nbytes,
-                )
-                ret_x_barycentric_coordinates = np.ndarray(
-                    shape=len(active_set_ACC),
-                    dtype=np.float64,
-                    buffer=ret_x_barycentric_coordinates_shm.buf,
-                )
-                ret_x_barycentric_coordinates[:] = point_x_ACC.barycentric_coordinates[
-                    :
-                ]
-                ret_x_cartesian_coordinates[:] = point_x_ACC.cartesian_coordinates[:]
+                # ret_x_barycentric_coordinates_shm = shared_memory.SharedMemory(
+                #     create=True,
+                #     size=np.zeros(shape=len(active_set_ACC), dtype=np.float64).nbytes,
+                # )
+                # ret_x_barycentric_coordinates = np.ndarray(
+                #     shape=len(active_set_ACC),
+                #     dtype=np.float64,
+                #     buffer=ret_x_barycentric_coordinates_shm.buf,
+                # )
+                # ret_x_barycentric_coordinates[:] = point_x_ACC.barycentric_coordinates[
+                #     :
+                # ]
+                ret_x_cartesian_coordinates[:] = x_ACC[:]
 
                 shared_buffers_dict = {
                     "buffer_lock": buffer_lock,
@@ -135,38 +211,38 @@ class ParameterFreeLaCG(_AbstractAlgorithm):
                     "global_eta": global_eta,
                     "global_sigma": global_sigma,
                     "ret_x_cartesian_coordinates": ret_x_cartesian_coordinates_shm.name,
-                    "ret_x_barycentric_coordinates": ret_x_barycentric_coordinates_shm.name,
+                    # "ret_x_barycentric_coordinates": ret_x_barycentric_coordinates_shm.name,
                 }
-
                 LOGGER.info(f"Initial sigma = {sigma}")
                 LOGGER.info(f"Initial eta = {eta}")
-
-                LOGGER.info(f"Creating ACC process with set size {len(active_set_ACC)}")
-                convex_hull_ACC = ConvexHull(active_set_ACC)
+                # LOGGER.info(f"Creating ACC process with set size {len(active_set_ACC)}")
+                # convex_hull_ACC = ConvexHull(active_set_ACC)
                 ACC_process = Process(
                     target=self.ACC.run,
                     args=(
                         objective_function,
-                        convex_hull_ACC,
-                        point_x_ACC,
+                        # convex_hull_ACC,
+                        x_ACC,
+                        x_ACC,
                         0.0,
                         eta,
                         sigma,
                         shared_buffers_dict,
                         iteration,
+                        1.0e-6,
                     ),
                 )
-                if len(active_set_ACC) > 1:
+                if len(np.where(x_ACC > 0.0)[0]) > 1:
                     LOGGER.info("Starting ACC process")
                     ACC_process.start()
                     ACC_process_started = True
 
             LOGGER.info("Running FAFW")
             # Run FAFW and wait for the output
-            point_x_FAFW = self.FAFW.run(
+            x_FAFW, wolfe_gap_FAFW, strong_wolfe_gap_FAFW = self.FAFW.run(
                 objective_function,
                 feasible_region,
-                point_x_FAFW,
+                x_FAFW,
                 target_accuracy=target_accuracy,
                 global_iter=global_iter,
             )
@@ -193,11 +269,12 @@ class ParameterFreeLaCG(_AbstractAlgorithm):
             LOGGER.info("Acquiring buffer")
             # retrieve the most recent output
             buffer_lock.acquire()
-            point_x_ACC = Point(
-                np.copy(ret_x_cartesian_coordinates),
-                np.copy(ret_x_barycentric_coordinates),
-                active_set_ACC,
-            )
+            x_ACC = np.copy(ret_x_cartesian_coordinates)
+            # point_x_ACC = Point(
+            #     np.copy(ret_x_cartesian_coordinates),
+            #     np.copy(ret_x_barycentric_coordinates),
+            #     active_set_ACC,
+            # )
             if ACC_process_started:
                 sigma = global_sigma.value
                 eta = global_eta.value
@@ -205,12 +282,15 @@ class ParameterFreeLaCG(_AbstractAlgorithm):
 
             # Compute Strong Wolfe gap (or dual gap)
             strong_wolfe_gap_ACC_prev = strong_wolfe_gap_ACC
-            strong_wolfe_gap_ACC = compute_strong_wolfe_gap(
-                point_x_ACC, objective_function, feasible_region
+            strong_wolfe_gap_ACC, wolfe_gap_ACC = compute_strong_wolfe_gap_simplex_reduced(
+                x_ACC, objective_function, np.ones(len(point_initial))/point_initial
             )
-            strong_wolfe_gap_FAFW = compute_strong_wolfe_gap(
-                point_x_FAFW, objective_function, feasible_region
-            )
+            # strong_wolfe_gap_FAFW = compute_strong_wolfe_gap_simplex(
+            #     x_FAFW, objective_function, feasible_region
+            # )
+            LOGGER.info(f"FAFW SWG = {strong_wolfe_gap_FAFW}")
+            LOGGER.info(f"ACC SWG = {strong_wolfe_gap_ACC}")
+            
             assert (
                 strong_wolfe_gap_FAFW <= target_accuracy
             )  # TODO: remove this after debugging.
@@ -227,15 +307,15 @@ class ParameterFreeLaCG(_AbstractAlgorithm):
                 ACC_process_started = False
                 with ACC_paused_flag.get_lock():
                     ACC_paused_flag.value = 0
-                ret_x_barycentric_coordinates_shm.close()
-                ret_x_barycentric_coordinates_shm.unlink()
+                # ret_x_barycentric_coordinates_shm.close()
+                # ret_x_barycentric_coordinates_shm.unlink()
 
                 ACC_restart_flag = True
-                point_x_ACC = point_x_FAFW
-                active_set_ACC = point_x_FAFW.support
+                x_ACC = x_FAFW
+                # active_set_ACC = point_x_FAFW.support
 
                 # Set output points
-                point_x_out = point_x_FAFW
+                x_out = x_FAFW
                 strong_wolfe_gap_out = strong_wolfe_gap_FAFW
             else:
                 LOGGER.info("ACC did better")
@@ -244,13 +324,13 @@ class ParameterFreeLaCG(_AbstractAlgorithm):
                 ACC_restart_flag = False
 
                 # Couple FAFW by using the better point from ACC if condition satisfies
-                if len(point_x_ACC.support) <= len(point_x_FAFW.support):
+                if len(np.where(x_ACC > 0.0)[0]) <= len(np.where(x_FAFW > 0.0)[0]):
                     LOGGER.info("FAFW <- ACC")
-                    point_x_FAFW = point_x_ACC
+                    x_FAFW = x_ACC
                     strong_wolfe_gap_FAFW = strong_wolfe_gap_ACC
 
                 # Set output points
-                point_x_out = point_x_ACC
+                x_out = x_ACC
                 strong_wolfe_gap_out = strong_wolfe_gap_ACC
 
             # Append output points
@@ -258,7 +338,7 @@ class ParameterFreeLaCG(_AbstractAlgorithm):
             with global_iter.get_lock():
                 iteration = global_iter.value
             duration = time.time() - start_time
-            f_val = objective_function.evaluate(point_x_out.cartesian_coordinates)
+            f_val = objective_function.evaluate(x_out)
             run_status = (
                 iteration,
                 duration,
@@ -285,21 +365,22 @@ class ParameterFreeLaCG(_AbstractAlgorithm):
         return run_history
 
 
-class ParameterFreeAGD:
+class ParameterFreeAGD_simplex:
     def __init__(self, estimate_ratio=2):
         self.estimate_ratio = estimate_ratio
 
     def run(
         self,
         objective_function,
-        feasible_region,
+        # feasible_region,
+        active_set_point,
         point_initial,
         epsilon=0.0,
         initial_eta=None,
         initial_sigma=None,
         shared_buffers_dict=None,
         last_restart_iter=0,
-        epsilon_f=1e-3,
+        epsilon_f=1e-6,
     ):
         """Run PF-ACC given an initial point and an active set/feasible region.
 
@@ -308,7 +389,8 @@ class ParameterFreeAGD:
 
         """
         LOGGER.info(f"ACC process started at last_restart_iter = {last_restart_iter}")
-        if len(feasible_region.vertices) <= 1:
+        if len(np.where(active_set_point > 0.0)[0]) <= 1:
+        # if len(feasible_region.vertices) <= 1:
             return point_initial, initial_eta, initial_sigma, 0
 
         dim = objective_function.dim
@@ -325,40 +407,50 @@ class ParameterFreeAGD:
                 shape=dim, dtype=np.float64, buffer=ret_x_cartesian_coordinates_shm.buf
             )
 
-            ret_x_barycentric_coordinates_shm = shared_memory.SharedMemory(
-                name=shared_buffers_dict["ret_x_barycentric_coordinates"]
-            )
-            ret_x_barycentric_coordinates = np.ndarray(
-                shape=len(feasible_region.vertices),
-                dtype=np.float64,
-                buffer=ret_x_barycentric_coordinates_shm.buf,
-            )
+            # ret_x_barycentric_coordinates_shm = shared_memory.SharedMemory(
+            #     name=shared_buffers_dict["ret_x_barycentric_coordinates"]
+            # )
+            # ret_x_barycentric_coordinates = np.ndarray(
+            #     shape=len(feasible_region.vertices),
+            #     dtype=np.float64,
+            #     buffer=ret_x_barycentric_coordinates_shm.buf,
+            # )
 
             global_iter = shared_buffers_dict["global_iter"]
             ACC_paused_flag = shared_buffers_dict["ACC_paused_flag"]
             buffer_lock = shared_buffers_dict["buffer_lock"]
         else:
             global_eta, global_sigma = None, None
-
         # Initializtion
-        point_x = point_initial
-        if np.allclose(point_x.cartesian_coordinates, point_x.support[0]):
-            point_y = Point(
-                point_x.support[1],
-                [1.0 if i == 1 else 0.0 for i in range(len(point_x.support))],
-                point_x.support,
-            )
+        x = point_initial
+        y = np.zeros(len(x))
+        
+        # y[np.argmax(np.where((x > 0.0) & (x < 1.00), True, False))] = 1.0
+        # y[2] = 1.0
+        
+        indices = np.where(x > 0.0)[0]
+        comparison_vector = np.zeros(len(x))
+        comparison_vector[indices[0]] = 1.0
+        if(np.allclose(x, comparison_vector)):
+            y[indices[1]] = 1.0
         else:
-            point_y = Point(
-                point_x.support[0],
-                [1.0 if i == 0 else 0.0 for i in range(len(point_x.support))],
-                point_x.support,
-            )
+            y[indices[0]] = 1.0
+        
+        # if np.allclose(point_x.cartesian_coordinates, point_x.support[0]):
+        #     point_y = Point(
+        #         point_x.support[1],
+        #         [1.0 if i == 1 else 0.0 for i in range(len(point_x.support))],
+        #         point_x.support,
+        #     )
+        # else:
+        #     point_y = Point(
+        #         point_x.support[0],
+        #         [1.0 if i == 0 else 0.0 for i in range(len(point_x.support))],
+        #         point_x.support,
+        #     )
 
         # Guess a eta if initial_sigma is None
         if initial_sigma is None or initial_sigma == 0.0:
-            x = point_x.cartesian_coordinates
-            y = point_y.cartesian_coordinates
             initial_sigma = (
                 2.0
                 * (
@@ -379,44 +471,47 @@ class ParameterFreeAGD:
         iteration = 0
 
         # Early return if primal gap is small
-        wolfe_gap = compute_wolfe_gap(point_x, objective_function, feasible_region)
-        if wolfe_gap <= epsilon_f:
+        strong_wolfe_gap, wolfe_gap = compute_strong_wolfe_gap_simplex_reduced(x, objective_function, active_set_point)
+        if strong_wolfe_gap <= epsilon_f:
             LOGGER.info("Early halting ACC with wolfe_gap <= epsilon_f")
             if shared_buffers_dict:
                 buffer_lock.acquire()
                 global_eta.value = eta
                 global_sigma.value = sigma
                 buffer_lock.release()
-            return point_x, eta, sigma, iteration
+            return x, eta, sigma, iteration
 
         LOGGER.info("1st time argmin_quadratic_over_active_set")
-        point_x_plus = argmin_quadratic_over_active_set(
+        x_plus = argmin_quadratic_over_active_set_simplex(
             quadratic_coefficient=eta / 2.0,
             linear_vector=(
-                objective_function.evaluate_grad(point_x.cartesian_coordinates)
-                - eta * point_x.cartesian_coordinates
+                objective_function.evaluate_grad(x)
+                - eta * x
             ),
-            active_set=feasible_region.vertices,
-            reference_point=point_x,
-            tolerance_type="gradient mapping",
-            tolerance=eta / 32,
+            active_set_point = active_set_point,
+            # active_set=feasible_region.vertices,
+            # reference_point=x,
+            # tolerance_type="gradient mapping",
+            # tolerance=eta / 32,
         )
         LOGGER.info("1st time argmin_quadratic_over_active_set ended")
         grad_mapping = (
-            point_x.cartesian_coordinates - point_x_plus.cartesian_coordinates
+            x - x_plus
         )
-
-        while np.linalg.norm(grad_mapping) > epsilon and wolfe_gap > epsilon_f:
-            point_x, grad_mapping, wolfe_gap, eta, sigma, _iteration = self.ACC_iter(
+        value_SWG_gap, FW_gap = compute_strong_wolfe_gap_simplex_reduced(x, objective_function, active_set_point)
+        while np.linalg.norm(grad_mapping) > epsilon and value_SWG_gap > epsilon_f:
+            x, grad_mapping, wolfe_gap, eta, sigma, _iteration = self.ACC_iter(
                 objective_function,
-                feasible_region,
-                point_initial=point_x,
+                active_set_point,
+                point_initial=x,
                 eta=eta,
                 sigma=sigma,
                 global_eta=global_eta,
                 global_sigma=global_sigma,
                 epsilon_f=epsilon_f,
             )
+            value_SWG_gap, FW_gap = compute_strong_wolfe_gap_simplex_reduced(x, objective_function, active_set_point)
+            
             iteration += _iteration
 
             LOGGER.info("ACC about to update buffer.")
@@ -436,10 +531,10 @@ class ParameterFreeAGD:
                 if _global_iter >= last_restart_iter + iteration:
                     # Update shared buffers
                     buffer_lock.acquire()
-                    ret_x_cartesian_coordinates[:] = point_x.cartesian_coordinates[:]
-                    ret_x_barycentric_coordinates[:] = point_x.barycentric_coordinates[
-                        :
-                    ]
+                    ret_x_cartesian_coordinates[:] = x[:]
+                    # ret_x_barycentric_coordinates[:] = point_x.barycentric_coordinates[
+                    #     :
+                    # ]
                     buffer_lock.release()
 
                     # Continue with the next ACC
@@ -457,12 +552,13 @@ class ParameterFreeAGD:
             global_eta.value = eta
             global_sigma.value = sigma
             buffer_lock.release()
-        return point_x, eta, sigma, iteration
+        return x, eta, sigma, iteration
 
     def ACC_iter(
         self,
         objective_function,
-        feasible_region,
+        # feasible_region,
+        active_set_point,
         point_initial,
         eta,
         sigma,
@@ -494,7 +590,7 @@ class ParameterFreeAGD:
         """
 
         # Initialization
-        point_x = point_initial
+        x = point_initial
         a = 1
         A = 1
         eta_0 = eta
@@ -505,29 +601,30 @@ class ParameterFreeAGD:
         while not sigma_flag:
 
             # Initialization
-            point_y = argmin_quadratic_over_active_set(
+            y = argmin_quadratic_over_active_set_simplex(
                 quadratic_coefficient=(eta_0 + sigma) / 2.0,
                 linear_vector=(
-                    objective_function.evaluate_grad(point_x.cartesian_coordinates)
-                    - (eta_0 + sigma) * point_x.cartesian_coordinates
+                    objective_function.evaluate_grad(x)
+                    - (eta_0 + sigma) * x
                 ),
-                active_set=feasible_region.vertices,
-                reference_point=point_x,
-                tolerance_type="gradient mapping",
-                tolerance=(eta_0 + sigma) / 32,
+                active_set_point = active_set_point,
+                # active_set=feasible_region.vertices,
+                # reference_point=x,
+                # tolerance_type="gradient mapping",
+                # tolerance=(eta_0 + sigma) / 32,
             )
             epsilon_0 = ((eta_0 + sigma) / 32) * (
                 np.linalg.norm(
-                    point_y.cartesian_coordinates - point_x.cartesian_coordinates
+                    y - x
                 )
                 ** 2
             )
-            point_v = point_y
-            point_yh = point_y
+            v = y
+            yh = y
             z = (
                 eta_0 + sigma
-            ) * point_x.cartesian_coordinates - objective_function.evaluate_grad(
-                point_x.cartesian_coordinates
+            ) * x - objective_function.evaluate_grad(
+                x
             )
             a = 1.0
             A = 1.0
@@ -535,7 +632,7 @@ class ParameterFreeAGD:
             reg_objective_function = RegularizedObjectiveFunction(
                 objective_function=objective_function,
                 sigma=sigma,
-                reference_point=point_initial.cartesian_coordinates,
+                reference_point=point_initial,
             )
 
             inner_complete_flag = False
@@ -548,17 +645,18 @@ class ParameterFreeAGD:
                     eta,
                     A,
                     z,
-                    point_v,
-                    point_yh,
-                    point_y,
+                    v,
+                    yh,
+                    y,
                     grad_mapping,
                     _iteration,
                 ) = self.AGD_iter(
                     objective_function,
                     reg_objective_function,
-                    feasible_region,
-                    point_yh,
-                    point_v,
+                    # feasible_region,
+                    active_set_point,
+                    yh,
+                    v,
                     z,
                     A,
                     eta,
@@ -570,12 +668,12 @@ class ParameterFreeAGD:
                 )
                 iteration += _iteration
 
-                wolfe_gap = compute_wolfe_gap(
-                    point_yh, objective_function, feasible_region
+                wolfe_gap = compute_wolfe_gap_simplex_reduced(
+                    yh, objective_function, active_set_point
                 )
                 if wolfe_gap <= epsilon_f:
                     LOGGER.info("Early halt inside ACC with wolfe_gap <= epsilon_f")
-                    return point_yh, grad_mapping, wolfe_gap, eta, sigma, iteration
+                    return yh, grad_mapping, wolfe_gap, eta, sigma, iteration
 
                 if (
                     np.linalg.norm(grad_mapping) ** 2 / (eta + sigma)
@@ -584,7 +682,7 @@ class ParameterFreeAGD:
                     inner_complete_flag = True
 
             if sigma * np.linalg.norm(
-                point_yh.cartesian_coordinates - point_initial.cartesian_coordinates
+                yh - point_initial
             ) / np.sqrt(eta + sigma) <= np.sqrt(epsilon_0):
                 sigma_flag = True
             else:
@@ -594,15 +692,16 @@ class ParameterFreeAGD:
                         global_sigma.value = sigma
                 LOGGER.info(f"Sigma halved: sigma = {sigma}")
 
-        return point_yh, grad_mapping, wolfe_gap, eta, sigma, iteration
+        return yh, grad_mapping, wolfe_gap, eta, sigma, iteration
 
     def AGD_iter(
         self,
         objective_function,
         reg_objective_function,
-        feasible_region,
-        point_y_,
-        point_v_,
+        # feasible_region,
+        active_set_point,
+        y_,
+        v_,
         z_,
         A_,
         eta,
@@ -626,11 +725,12 @@ class ParameterFreeAGD:
             epsilon_l = theta * epsilon_0 / 4
             epsilon_M = a * epsilon_0 / 4
 
-            point_x, z, point_v, point_yh, point_y = self.AGD_step(
+            x, z, v, yh, y = self.AGD_step(
                 reg_objective_function,
-                feasible_region,
-                point_y_,
-                point_v_,
+                # feasible_region,
+                active_set_point,
+                y_,
+                v_,
                 z_,
                 a,
                 A,
@@ -643,14 +743,14 @@ class ParameterFreeAGD:
 
             eta_x_yh = self._check_eta_condition(
                 objective_function,
-                point_x.cartesian_coordinates,
-                point_yh.cartesian_coordinates,
+                x,
+                yh,
                 eta,
             )
             eta_yh_y = self._check_eta_condition(
                 objective_function,
-                point_yh.cartesian_coordinates,
-                point_y.cartesian_coordinates,
+                yh,
+                y,
                 eta,
             )
 
@@ -664,16 +764,17 @@ class ParameterFreeAGD:
                 LOGGER.info(f"Eta doubled: eta = {eta}")
 
         grad_mapping = (eta + sigma) * (
-            point_yh.cartesian_coordinates - point_y.cartesian_coordinates
+            yh - y
         )
-        return eta, A, z, point_v, point_yh, point_y, grad_mapping, iteration
+        return eta, A, z, v, yh, y, grad_mapping, iteration
 
     def AGD_step(
         self,
         reg_objective_function,
-        feasible_region,
-        point_y_,
-        point_v_,
+        # feasible_region,
+        active_set_point,
+        y_,
+        v_,
         z_,  # A numpy array
         a,
         A,
@@ -712,39 +813,41 @@ class ParameterFreeAGD:
         point_y: Point
         """
         theta = a / A
-        point_x = (1 / (1 + theta)) * point_y_ + (theta / (1 + theta)) * point_v_
+        x = (1 / (1 + theta)) * y_ + (theta / (1 + theta)) * v_
 
         z = (
             z_
-            - a * reg_objective_function.evaluate_grad(point_x.cartesian_coordinates)
-            + sigma * a * point_x.cartesian_coordinates
+            - a * reg_objective_function.evaluate_grad(x)
+            + sigma * a * x
         )
-        point_v = argmin_quadratic_over_active_set(
+        v = argmin_quadratic_over_active_set_simplex(
             quadratic_coefficient=(sigma * A + eta_0) / 2,
             linear_vector=(-z),
-            active_set=feasible_region.vertices,
-            reference_point=point_x,
-            tolerance_type="dual gap",
-            tolerance=epsilon_M,
+            active_set_point = active_set_point,
+            # active_set=feasible_region.vertices,
+            # reference_point=x,
+            # tolerance_type="dual gap",
+            # tolerance=epsilon_M,
         )
-        point_yh = (1 - theta) * point_y_ + theta * point_v
-        point_y = argmin_quadratic_over_active_set(
+        yh = (1 - theta) * y_ + theta * v
+        y = argmin_quadratic_over_active_set_simplex(
             quadratic_coefficient=(eta + sigma) / 2,
             linear_vector=(
-                reg_objective_function.evaluate_grad(point_yh.cartesian_coordinates)
-                - (eta + sigma) * point_yh.cartesian_coordinates
+                reg_objective_function.evaluate_grad(yh)
+                - (eta + sigma) * yh
             ),
-            active_set=feasible_region.vertices,
-            reference_point=point_yh,
-            tolerance_type="dual gap",
-            tolerance=1e-10,
+            active_set_point = active_set_point,
+            # active_set=feasible_region.vertices,
+            # reference_point=yh,
+            # tolerance_type="dual gap",
+            # tolerance=1e-10,
         )
         return (
-            point_x,
+            x,
             z,
-            point_v,
-            point_yh,
-            point_y,
+            v,
+            yh,
+            y,
         )
 
     # TODO: change to point_x, point_y
@@ -764,7 +867,7 @@ class ParameterFreeAGD:
         return A_ * theta_max / (1 - theta_max)
 
 
-class FractionalAwayStepFW:
+class FractionalAwayStepFW_simplex:
     def __init__(self, fw_variant="AFW", ratio=0.5, **kwargs):
         assert (
             fw_variant == "AFW" or fw_variant == "PFW"
@@ -782,15 +885,15 @@ class FractionalAwayStepFW:
         global_iter=None,
     ):
         if target_accuracy is None:
-            grad = objective_function.evaluate_grad(point_initial.cartesian_coordinates)
+            grad = objective_function.evaluate_grad(point_initial)
             v = feasible_region.lp_oracle(grad)
-            point_a, index_max = feasible_region.away_oracle(grad, point_initial)
-            strong_wolfe_gap = np.dot(grad, point_a.cartesian_coordinates - v)
+            a, index_max = feasible_region.away_oracle(grad, point_initial)
+            strong_wolfe_gap = np.dot(grad, a - v)
             target_accuracy = strong_wolfe_gap * self.ratio
 
-        fw_algorithm = FrankWolfe(self.fw_variant, "line_search")
+        fw_algorithm = FrankWolfe_simplex(self.fw_variant, "line_search")
         exit_criterion = ExitCriterion("SWG", target_accuracy)
-        point_out = fw_algorithm.run(
+        point_out, dual_gap, strong_wolfe_gap = fw_algorithm.run(
             objective_function,
             feasible_region,
             exit_criterion,
@@ -798,4 +901,4 @@ class FractionalAwayStepFW:
             save_and_output_results=False,
             global_iter=global_iter,
         )
-        return point_out
+        return point_out, dual_gap, strong_wolfe_gap

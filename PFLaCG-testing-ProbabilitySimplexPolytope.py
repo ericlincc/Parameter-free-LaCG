@@ -178,7 +178,7 @@ plt.title(
 plt.xlabel(x_axis)
 plt.ylabel("$f - f*$")
 plt.legend()
-plt.savefig("Comparison_time_v11.pdf")
+plt.savefig("Comparison_time_v12.pdf")
 # plt.show()
 plt.close()
 
@@ -240,7 +240,7 @@ plt.title(
 plt.xlabel("Iteration")
 plt.ylabel("$f - f*$")
 plt.legend()
-plt.savefig("Comparison_iteration_v11.pdf")
+plt.savefig("Comparison_iteration_v12.pdf")
 # plt.show()
 plt.close()
 

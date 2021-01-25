@@ -56,7 +56,7 @@ M = matrix.T.dot(matrix)
 M = M + 500 * np.identity(dimension)
 b = np.random.rand(dimension)
 objective_function = Quadratic(dimension, M, b)
-feasible_region = ProbabilitySimplexPolytope(dimension)
+feasible_region = BirkhoffPolytope(dimension)
 point_x = Point(
     feasible_region.initial_point,
     (1,),
@@ -65,40 +65,22 @@ point_x = Point(
 print(objective_function.Mu)
 print(objective_function.L)
 
+DICG_algorithm = FrankWolfe("DIPFW", "line_search")
+DICG_run = PFW_algorithm.run(objective_function, feasible_region, test_exit_criterion, point_x)
 
-# In[6]:
-
+Lazy_algorithm = FrankWolfe("lazy", "line_search")
+Lazy_run = PFW_algorithm.run(objective_function, feasible_region, test_exit_criterion, point_x)
 
 PFLaCG = ParameterFreeLaCG(iter_sync=ITER_SYNC)
 PFLaCG_run = PFLaCG.run(objective_function, feasible_region, test_exit_criterion, point_x)
 
-
-# In[7]:
-
-
 AFW_algorithm = FrankWolfe("AFW", "line_search")
 AFW_run = AFW_algorithm.run(objective_function, feasible_region, test_exit_criterion, point_x)
-
-
-# In[8]:
-
 
 PFW_algorithm = FrankWolfe("PFW", "line_search")
 PFW_run = PFW_algorithm.run(objective_function, feasible_region, test_exit_criterion, point_x)
 
-
-# ----------
-
-# In[9]:
-
-
-# Computing approx x* using AFW
-optimal_AFW_run = AFW_algorithm.run(objective_function, feasible_region, optimal_exit_criterion, point_x)
-
-
-# ----------
-
-# In[10]:
+optimal_AFW_run = DICG_algorithm.run(objective_function, feasible_region, optimal_exit_criterion, point_x)
 
 
 approx_f_opt = optimal_AFW_run[-1][2]
@@ -165,7 +147,7 @@ plt.title(
 plt.xlabel(x_axis)
 plt.ylabel("$f - f*$")
 plt.legend()
-plt.savefig("Comparison_time_standard_v12.pdf")
+plt.savefig("Birkhoff_Comparison_time_standard_v12.pdf")
 # plt.show()
 plt.close()
 
@@ -227,7 +209,7 @@ plt.title(
 plt.xlabel("Iteration")
 plt.ylabel("$f - f*$")
 plt.legend()
-plt.savefig("Comparison_iteration_standard_v12.pdf")
+plt.savefig("Birkhoff_Comparison_iteration_standard_v12.pdf")
 # plt.show()
 plt.close()
 

@@ -366,6 +366,95 @@ def calculate_stepsize(x, d):
     else:
         return min(val)
 
+# TODO: Optimise and clean up these projection methods
+# TODO: Need more consistent variable naming below
+def argmin_quadratic_over_active_set_test(
+    quadratic_coefficient,
+    linear_vector,
+    active_set,
+    reference_point,
+    tolerance_type,
+    tolerance,
+    time_limit=np.inf,
+    max_steps=np.inf,
+    use_numba=True,
+    active_set_matrix = None,
+    active_set_quadratic= None,
+):
+
+    LOGGER.info("Calling argmin")
+
+    if tolerance_type not in ["dual gap", "gradient mapping"]:
+        raise ValueError("tolerance_type must be either dual_gap or gradient_mapping")
+
+    if use_numba:
+        constant = 0.0
+        if(active_set_matrix is not None and active_set_quadratic is not None):
+            quadratic = 2 * quadratic_coefficient * active_set_quadratic
+            linear = active_set_matrix.dot(linear_vector)
+            barycentric_coordinates = (
+                accelerated_projected_gradient_descent_over_simplex_jit(
+                    quadratic=quadratic,
+                    linear=linear,
+                    constant=constant,
+                    active_set=active_set_matrix,
+                    initial_x=np.array(
+                        reference_point.barycentric_coordinates
+                    ),  # TODO: make sure that this is an np array
+                    reference_x=np.array(reference_point.cartesian_coordinates),
+                    tolerance_type=tolerance_type,
+                    tolerance=tolerance,
+                )
+            )
+        else:
+            matrix = np.vstack(active_set)
+            quadratic = 2 * quadratic_coefficient * matrix.dot(matrix.T)
+            linear = matrix.dot(linear_vector)
+            barycentric_coordinates = (
+                accelerated_projected_gradient_descent_over_simplex_jit(
+                    quadratic=quadratic,
+                    linear=linear,
+                    constant=constant,
+                    active_set=matrix,
+                    initial_x=np.array(
+                        reference_point.barycentric_coordinates
+                    ),  # TODO: make sure that this is an np array
+                    reference_x=np.array(reference_point.cartesian_coordinates),
+                    tolerance_type=tolerance_type,
+                    tolerance=tolerance,
+                )
+            )
+        if not barycentric_coordinates.any():
+            raise Exception("projection step is getting stuck")
+        cartesian_coordinates = np.zeros(len(active_set[0]))
+        for i in range(len(active_set)):
+            cartesian_coordinates += barycentric_coordinates[i] * active_set[i]
+        return Point(cartesian_coordinates, tuple(barycentric_coordinates), active_set)
+
+    if tolerance_type == "dual gap":
+        stopping_criterion = StoppingCriterion(
+            tolerance=tolerance,
+            reference_point=None,
+            coefficient=None,
+        )
+    elif tolerance_type == "gradient mapping":
+        stopping_criterion = StoppingCriterion(
+            tolerance=None,
+            reference_point=reference_point,
+            coefficient=tolerance,
+        )
+    else:
+        raise ValueError("Invalid tolerance_type.")
+    x, active_set, barycentric_coordinates = project_onto_active_set(
+        quadratic_coefficient,
+        linear_vector,
+        active_set,
+        reference_point.barycentric_coordinates,
+        stopping_criterion,
+    )
+
+    return Point(x, tuple(barycentric_coordinates), tuple(active_set))
+
 
 # TODO: Optimise and clean up these projection methods
 # TODO: Need more consistent variable naming below

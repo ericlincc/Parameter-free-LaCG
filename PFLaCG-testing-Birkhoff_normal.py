@@ -94,6 +94,8 @@ plt.subplot(1, 2, 1)
 PFLaCG_run_iter_w = [(run_status[x_index], run_status[4]) for run_status in PFLaCG_run]
 AFW_run_iter_w = [(run_status[x_index], run_status[4]) for run_status in AFW_run]
 PFW_run_iter_w = [(run_status[x_index], run_status[4]) for run_status in PFW_run]
+Lazy_run_iter_w = [(run_status[x_index], run_status[4]) for run_status in Lazy_run]
+DICG_run_iter_w = [(run_status[x_index], run_status[4]) for run_status in DICG_run]
 plt.semilogy(
     [s[0] for s in PFLaCG_run_iter_w],
     [s[1] for s in PFLaCG_run_iter_w],
@@ -108,6 +110,16 @@ plt.semilogy(
     [s[0] for s in PFW_run_iter_w],
     [s[1] for s in PFW_run_iter_w],
     label = "PFW"
+)
+plt.semilogy(
+    [s[0] for s in Lazy_run_iter_w],
+    [s[1] for s in Lazy_run_iter_w],
+    label = "Lazy"
+)
+plt.semilogy(
+    [s[0] for s in DICG_run_iter_w],
+    [s[1] for s in DICG_run_iter_w],
+    label = "DICG"
 )
 plt.title(
     f"{type(objective_function).__name__}\n"
@@ -123,6 +135,8 @@ plt.subplot(1, 2, 2)
 PFLaCG_run_iter_w = [(run_status[x_index], run_status[2]- approx_f_opt) for run_status in PFLaCG_run]
 AFW_run_iter_w = [(run_status[x_index], run_status[2] - approx_f_opt) for run_status in AFW_run]
 PFW_run_iter_w = [(run_status[x_index], run_status[2] - approx_f_opt) for run_status in PFW_run]
+Lazy_run_iter_w = [(run_status[x_index], run_status[2]) for run_status in Lazy_run]
+DICG_run_iter_w = [(run_status[x_index], run_status[2]) for run_status in DICG_run]
 plt.semilogy(
     [s[0] for s in PFLaCG_run_iter_w],
     [s[1] for s in PFLaCG_run_iter_w],
@@ -137,6 +151,16 @@ plt.semilogy(
     [s[0] for s in PFW_run_iter_w],
     [s[1] for s in PFW_run_iter_w],
     label = "PFW"
+)
+plt.semilogy(
+    [s[0] for s in Lazy_run_iter_w],
+    [s[1] for s in Lazy_run_iter_w],
+    label = "Lazy"
+)
+plt.semilogy(
+    [s[0] for s in DICG_run_iter_w],
+    [s[1] for s in DICG_run_iter_w],
+    label = "DICG"
 )
 plt.title(
     f"{type(objective_function).__name__}\n"
@@ -213,13 +237,6 @@ plt.savefig("Birkhoff_Comparison_iteration_standard_v12.pdf")
 # plt.show()
 plt.close()
 
-# In[ ]:
-
-
-
-
-
-# In[ ]:
 
 
 

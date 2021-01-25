@@ -17,6 +17,8 @@ from pflacg.algorithms.project_onto_active_set_jit import (
     accelerated_projected_gradient_descent_over_simplex_jit,
 )
 
+import psutil
+
 
 logging.basicConfig(
     level=logging.INFO,
@@ -52,7 +54,16 @@ class ParameterFreeLaCG(_AbstractAlgorithm):
         feasible_region,
         exit_criterion,
         point_initial,
+        cpu_affinity=None,
     ):
+        if cpu_affinity is not None:
+            LOGGER.info("Setting pflacg cpu_affinity")
+            psutil.Process().cpu_affinity(cpu_affinity["pflacg"])
+
+        # TODO: Testing copying objects for FAFW runs
+        from copy import deepcopy
+        objective_function_copy = deepcopy(objective_function)
+        feasible_region_copy = deepcopy(feasible_region)
 
         ACC_process_overhead = {
             "initialization" : 0.,
@@ -64,6 +75,7 @@ class ParameterFreeLaCG(_AbstractAlgorithm):
             "AFW_run": 0.,
             "global_iter": 0.,
             "logging": 0.,
+            "point_copying": 0.,
         }
 
         s = time.time()  # <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
@@ -173,6 +185,7 @@ class ParameterFreeLaCG(_AbstractAlgorithm):
                         sigma,
                         shared_buffers_dict,
                         iteration,
+                        cpu_affinity,
                     ),
                 )
                 if len(active_set_ACC) > 1:
@@ -183,13 +196,20 @@ class ParameterFreeLaCG(_AbstractAlgorithm):
             ACC_process_overhead["ACC process creation"] += time.time() - s  # >>>>>>>>>>>>>>>>>>>>>>
 
 
+
+            # TODO: Testing copying objects for FAFW runs
+            s = time.time()  # <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
+            point_x_FAFW_copy =deepcopy(point_x_FAFW)
+            ACC_process_overhead["point_copying"] += time.time() - s  # >>>>>>>>>>>>>>>>>>>>>>
+
+
             s = time.time()  # <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
             LOGGER.info("Running FAFW")
             # Run FAFW and wait for the output
             point_x_FAFW = self.FAFW.run(
-                objective_function,
-                feasible_region,
-                point_x_FAFW,
+                objective_function_copy,
+                feasible_region_copy,
+                point_x_FAFW_copy,
                 target_accuracy=target_accuracy,
                 global_iter=global_iter,
             )
@@ -340,6 +360,7 @@ class ParameterFreeAGD:
         initial_sigma=None,
         shared_buffers_dict=None,
         last_restart_iter=0,
+        cpu_affinity=None,
         epsilon_f=1e-4,
     ):
         """Run PF-ACC given an initial point and an active set/feasible region.
@@ -351,6 +372,10 @@ class ParameterFreeAGD:
         LOGGER.info(f"ACC process started at last_restart_iter = {last_restart_iter}")
         if len(feasible_region.vertices) <= 1:
             return point_initial, initial_eta, initial_sigma, 0
+
+        if cpu_affinity is not None:
+            LOGGER.info("Setting acc cpu_affinity")
+            psutil.Process().cpu_affinity(cpu_affinity["acc"])
 
         dim = objective_function.dim
 
@@ -415,8 +440,8 @@ class ParameterFreeAGD:
             initial_eta = initial_sigma
         eta = initial_eta
         sigma = initial_sigma
-        LOGGER.info(f"initial_sigma = {initial_sigma}")
-        LOGGER.info(f"initial_eta = {initial_eta}")
+        # LOGGER.info(f"initial_sigma = {initial_sigma}")
+        # LOGGER.info(f"initial_eta = {initial_eta}")
         iteration = 0
 
         # Early return if primal gap is small
@@ -633,7 +658,7 @@ class ParameterFreeAGD:
                 if global_sigma:
                     with global_sigma.get_lock():
                         global_sigma.value = sigma
-                LOGGER.info(f"Sigma halved: sigma = {sigma}")
+                # LOGGER.info(f"Sigma halved: sigma = {sigma}")
 
         return point_yh, grad_mapping, wolfe_gap, eta, sigma, iteration
 
@@ -702,7 +727,7 @@ class ParameterFreeAGD:
                 if global_eta:
                     with global_eta.get_lock():
                         global_eta.value = eta
-                LOGGER.info(f"Eta doubled: eta = {eta}")
+                # LOGGER.info(f"Eta doubled: eta = {eta}")
 
         grad_mapping = (eta + sigma) * (
             point_yh.cartesian_coordinates - point_y.cartesian_coordinates

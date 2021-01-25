@@ -381,7 +381,7 @@ def argmin_quadratic_over_active_set(
     use_numba=True,
 ):
 
-    LOGGER.info("Calling argmin")
+    # LOGGER.info("Calling argmin")
 
     if tolerance_type not in ["dual gap", "gradient mapping"]:
         raise ValueError("tolerance_type must be either dual_gap or gradient_mapping")

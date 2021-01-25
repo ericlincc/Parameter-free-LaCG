@@ -147,48 +147,13 @@ class ProbabilitySimplexPolytope(_AbstractFeasibleRegion):
         return v
 
     #Input is the vector over which we calculate the inner product.
-    def away_oracle(self, grad, x):
+    def away_oracle_fast(self, grad, x):
         aux = np.multiply(grad, np.sign(x))
         indices = np.where(x > 0.0)[0]
         v = np.zeros(len(x), dtype = float)
         indexMax = indices[np.argmax(aux[indices])]
         v[indexMax] = 1.0
         return v, indexMax
-
-    # def away_oracle(self, grad, point_x):
-    #     return max_vertex(grad, point_x.support)
-
-    def projection(self, x):
-        (n,) = x.shape  # will raise ValueError if v is not 1-D
-        if x.sum() == 1.0 and np.alltrue(x >= 0):
-            return x
-        v = x - np.max(x)
-        u = np.sort(v)[::-1]
-        cssv = np.cumsum(u)
-        rho = np.count_nonzero(u * np.arange(1, n + 1) > (cssv - 1.0)) - 1
-        theta = float(cssv[rho] - 1.0) / (rho + 1)
-        w = (v - theta).clip(min=0)
-        return w
-
-
-class ProbabilitySimplexPolytope_slow(_AbstractFeasibleRegion):
-    def __init__(self, dim):
-        self.dim = dim
-
-    @property
-    def initial_point(self):
-        v = np.zeros(self.dim)
-        v[0] = 1.0
-        return v
-
-    @property
-    def initial_active_set(self):
-        return [self.initial_point()]
-
-    def lp_oracle(self, x):
-        v = np.zeros(len(x), dtype=float)
-        v[np.argmin(x)] = 1.0
-        return v
 
     def away_oracle(self, grad, point_x):
         return max_vertex(grad, point_x.support)
@@ -204,7 +169,6 @@ class ProbabilitySimplexPolytope_slow(_AbstractFeasibleRegion):
         theta = float(cssv[rho] - 1.0) / (rho + 1)
         w = (v - theta).clip(min=0)
         return w
-
 
 class L1UnitBallPolytope(_AbstractFeasibleRegion):
     def __init__(self, dim):

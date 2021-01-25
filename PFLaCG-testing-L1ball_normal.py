@@ -66,10 +66,10 @@ print(objective_function.Mu)
 print(objective_function.L)
 
 DICG_algorithm = FrankWolfe("DIPFW", "line_search")
-DICG_run = PFW_algorithm.run(objective_function, feasible_region, test_exit_criterion, point_x)
+DICG_run = DICG_algorithm.run(objective_function, feasible_region, test_exit_criterion, point_x)
 
 Lazy_algorithm = FrankWolfe("lazy", "line_search")
-Lazy_run = PFW_algorithm.run(objective_function, feasible_region, test_exit_criterion, point_x)
+Lazy_run = Lazy_algorithm.run(objective_function, feasible_region, test_exit_criterion, point_x)
 
 PFLaCG = ParameterFreeLaCG(iter_sync=ITER_SYNC)
 PFLaCG_run = PFLaCG.run(objective_function, feasible_region, test_exit_criterion, point_x)

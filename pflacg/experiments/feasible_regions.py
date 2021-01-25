@@ -7,6 +7,7 @@ import math
 
 import numpy as np
 from scipy.sparse.linalg import eigsh
+from scipy.sparse import csc_matrix
 
 from pflacg.experiments.experiments_helper import max_vertex
 
@@ -122,6 +123,7 @@ class BirkhoffPolytope(_AbstractFeasibleRegion):
         solution = np.zeros((self.mat_dim, self.mat_dim))
         solution[matching] = 1
         return solution.reshape(self.dim)
+        # return csc_matrix(solution.reshape(self.dim))
 
     def away_oracle(self, grad, point_x):
         return max_vertex(grad, point_x.support)

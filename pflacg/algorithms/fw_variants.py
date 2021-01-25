@@ -324,14 +324,16 @@ class FrankWolfe(_AbstractAlgorithm):
         f_val = objective_function.evaluate(point_x.cartesian_coordinates)
         v = feasible_region.lp_oracle(grad)
         a, index_max = feasible_region.away_oracle(grad, point_x)
-        strong_wolfe_gap = grad.dot(a.cartesian_coordinates - v)
-
-        dual_gap = grad.dot(point_x.cartesian_coordinates - v)
+        strong_wolfe_gap = (a.cartesian_coordinates - v).dot(grad)
+        dual_gap = grad.dot(point_x.cartesian_coordinates) - v.dot(grad)
 
         if self.fw_variant == "lazy" or self.fw_variant == "lazy quick exit":
             phi_val = [dual_gap]
 
+
         run_status = (iteration, duration, f_val, dual_gap, strong_wolfe_gap)
+        print(run_status)
+        print(self.fw_variant)
         if save_and_output_results:
             LOGGER.info(
                 "Running " + str(self.fw_variant) + "({5}): "

@@ -389,8 +389,11 @@ class ParameterFreeAGD:
                 buffer_lock.release()
             return point_x, eta, sigma, iteration
 
+        self.matrix = np.vstack(feasible_region.vertices)
+        self.quadratic = self.matrix.dot(self.matrix.T)
+
         LOGGER.info("1st time argmin_quadratic_over_active_set")
-        point_x_plus = argmin_quadratic_over_active_set(
+        point_x_plus = argmin_quadratic_over_active_set_test(
             quadratic_coefficient=eta / 2.0,
             linear_vector=(
                 objective_function.evaluate_grad(point_x.cartesian_coordinates)
@@ -400,6 +403,8 @@ class ParameterFreeAGD:
             reference_point=point_x,
             tolerance_type="gradient mapping",
             tolerance=eta / 32,
+            active_set_matrix = self.matrix,
+            active_set_quadratic= self.quadratic,
         )
         LOGGER.info("1st time argmin_quadratic_over_active_set ended")
         grad_mapping = (
@@ -505,7 +510,7 @@ class ParameterFreeAGD:
         while not sigma_flag:
 
             # Initialization
-            point_y = argmin_quadratic_over_active_set(
+            point_y = argmin_quadratic_over_active_set_test(
                 quadratic_coefficient=(eta_0 + sigma) / 2.0,
                 linear_vector=(
                     objective_function.evaluate_grad(point_x.cartesian_coordinates)
@@ -515,6 +520,8 @@ class ParameterFreeAGD:
                 reference_point=point_x,
                 tolerance_type="gradient mapping",
                 tolerance=(eta_0 + sigma) / 32,
+                active_set_matrix = self.matrix,
+                active_set_quadratic= self.quadratic,
             )
             epsilon_0 = ((eta_0 + sigma) / 32) * (
                 np.linalg.norm(
@@ -719,16 +726,18 @@ class ParameterFreeAGD:
             - a * reg_objective_function.evaluate_grad(point_x.cartesian_coordinates)
             + sigma * a * point_x.cartesian_coordinates
         )
-        point_v = argmin_quadratic_over_active_set(
+        point_v = argmin_quadratic_over_active_set_test(
             quadratic_coefficient=(sigma * A + eta_0) / 2,
             linear_vector=(-z),
             active_set=feasible_region.vertices,
             reference_point=point_x,
             tolerance_type="dual gap",
             tolerance=epsilon_M,
+            active_set_matrix = self.matrix,
+            active_set_quadratic= self.quadratic,
         )
         point_yh = (1 - theta) * point_y_ + theta * point_v
-        point_y = argmin_quadratic_over_active_set(
+        point_y = argmin_quadratic_over_active_set_test(
             quadratic_coefficient=(eta + sigma) / 2,
             linear_vector=(
                 reg_objective_function.evaluate_grad(point_yh.cartesian_coordinates)
@@ -738,6 +747,8 @@ class ParameterFreeAGD:
             reference_point=point_yh,
             tolerance_type="dual gap",
             tolerance=1e-10,
+            active_set_matrix = self.matrix,
+            active_set_quadratic= self.quadratic,
         )
         return (
             point_x,

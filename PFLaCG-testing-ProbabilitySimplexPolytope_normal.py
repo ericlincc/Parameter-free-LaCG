@@ -48,7 +48,7 @@ optimal_exit_criterion = ExitCriterion(
     max_time=600.0,
     max_iter=10000
 )
-dimension = 10000
+dimension = 100
 
 
 matrix = np.random.rand(dimension, dimension)
@@ -165,7 +165,7 @@ plt.title(
 plt.xlabel(x_axis)
 plt.ylabel("$f - f*$")
 plt.legend()
-plt.savefig("Comparison_time_standard_v12.pdf")
+plt.savefig("Comparison_time_standard_test.pdf")
 # plt.show()
 plt.close()
 
@@ -227,7 +227,7 @@ plt.title(
 plt.xlabel("Iteration")
 plt.ylabel("$f - f*$")
 plt.legend()
-plt.savefig("Comparison_iteration_standard_v12.pdf")
+plt.savefig("Comparison_iteration_standard_test.pdf")
 # plt.show()
 plt.close()
 

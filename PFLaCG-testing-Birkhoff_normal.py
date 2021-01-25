@@ -8,11 +8,6 @@ from multiprocessing import shared_memory, Value, Process, Lock
 
 import matplotlib.pyplot as plt
 
-import os
-os.environ["MKL_NUM_THREADS"] = "1" 
-os.environ["NUMEXPR_NUM_THREADS"] = "1" 
-os.environ["OMP_NUM_THREADS"] = "1" 
-
 import numpy as np
 
 from pflacg.algorithms._algorithms_utils import *
@@ -20,6 +15,7 @@ from pflacg.algorithms.pflacg import ParameterFreeLaCG
 from pflacg.algorithms.fw_variants import FrankWolfe
 from pflacg.experiments.objective_functions import *
 from pflacg.experiments.feasible_regions import *
+from scipy.sparse import csc_matrix
 
 
 # In[5]:
@@ -48,7 +44,7 @@ optimal_exit_criterion = ExitCriterion(
     max_time=600.0,
     max_iter=10000
 )
-dimension = 10000
+dimension = 100
 
 
 matrix = np.random.rand(dimension, dimension)
@@ -57,10 +53,12 @@ M = M + 500 * np.identity(dimension)
 b = np.random.rand(dimension)
 objective_function = Quadratic(dimension, M, b)
 feasible_region = BirkhoffPolytope(dimension)
+
 point_x = Point(
     feasible_region.initial_point,
     (1,),
     (feasible_region.initial_point,)
+    # (csc_matrix(feasible_region.initial_point),)
 )
 print(objective_function.Mu)
 print(objective_function.L)
@@ -231,7 +229,7 @@ plt.title(
 plt.xlabel(x_axis)
 plt.ylabel("$f - f*$")
 plt.legend()
-plt.savefig("Birkhoff_Comparison_time_standard_v12.pdf")
+plt.savefig("Birkhoff_Comparison_time_standard_test.pdf")
 # plt.show()
 plt.close()
 
@@ -367,7 +365,7 @@ plt.title(
 plt.xlabel("Iteration")
 plt.ylabel("$f - f*$")
 plt.legend()
-plt.savefig("Birkhoff_Comparison_iteration_standard_v12.pdf")
+plt.savefig("Birkhoff_Comparison_iteration_standard_test.pdf")
 # plt.show()
 plt.close()
 

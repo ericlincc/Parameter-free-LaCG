@@ -50,7 +50,6 @@ optimal_exit_criterion = ExitCriterion(
 )
 dimension = 10000
 
-
 matrix = np.random.rand(dimension, dimension)
 M = matrix.T.dot(matrix)
 M = M + 500 * np.identity(dimension)
@@ -65,8 +64,8 @@ point_x = Point(
 print(objective_function.Mu)
 print(objective_function.L)
 
-DICG_algorithm = FrankWolfe("DIPFW", "line_search")
-DICG_run = DICG_algorithm.run(objective_function, feasible_region, test_exit_criterion, point_x)
+DIPFW_algorithm = FrankWolfe("DIPFW", "line_search")
+DIPFW_run = DIPFW_algorithm.run(objective_function, feasible_region, test_exit_criterion, point_x)
 
 Lazy_algorithm = FrankWolfe("lazy", "line_search")
 Lazy_run = Lazy_algorithm.run(objective_function, feasible_region, test_exit_criterion, point_x)
@@ -80,7 +79,7 @@ AFW_run = AFW_algorithm.run(objective_function, feasible_region, test_exit_crite
 PFW_algorithm = FrankWolfe("PFW", "line_search")
 PFW_run = PFW_algorithm.run(objective_function, feasible_region, test_exit_criterion, point_x)
 
-optimal_AFW_run = DICG_algorithm.run(objective_function, feasible_region, optimal_exit_criterion, point_x)
+optimal_AFW_run = DIPFW_algorithm.run(objective_function, feasible_region, optimal_exit_criterion, point_x)
 
 
 approx_f_opt = optimal_AFW_run[-1][2]
@@ -90,35 +89,70 @@ if ITER_SYNC:
 else:
     x_index, x_axis = 1, "Time"
 
+
+colors = ["k", "c", "b", "m", "r", "g"]
+markers = ["o", "s", "^", "P", "D", "p"]
+size_marker = 12
+fontsize = 19
+fontsize_legend = 20
+linewidth_figures = 4.0
+
+
 plt.subplot(1, 2, 1)
 PFLaCG_run_iter_w = [(run_status[x_index], run_status[4]) for run_status in PFLaCG_run]
 AFW_run_iter_w = [(run_status[x_index], run_status[4]) for run_status in AFW_run]
 PFW_run_iter_w = [(run_status[x_index], run_status[4]) for run_status in PFW_run]
 Lazy_run_iter_w = [(run_status[x_index], run_status[4]) for run_status in Lazy_run]
-DICG_run_iter_w = [(run_status[x_index], run_status[4]) for run_status in DICG_run]
+DICG_run_iter_w = [(run_status[x_index], run_status[4]) for run_status in DIPFW_run]
+
 plt.semilogy(
     [s[0] for s in PFLaCG_run_iter_w],
     [s[1] for s in PFLaCG_run_iter_w],
+    colors[0],
+    marker=markers[0],
+    markersize=size_marker,
+    markevery = np.linspace(0, len([s[0] for s in PFLaCG_run_iter_w]) - 2, 10, dtype = int).tolist(),
+    linewidth=linewidth_figures,
     label = "PFLaCG"
 )
 plt.semilogy(
     [s[0] for s in AFW_run_iter_w],
     [s[1] for s in AFW_run_iter_w],
+    colors[1],
+    marker=markers[1],
+    markersize=size_marker,
+    markevery = np.linspace(0, len([s[0] for s in AFW_run_iter_w]) - 2, 10, dtype = int).tolist(),
+    linewidth=linewidth_figures,
     label = "AFW"
 )
 plt.semilogy(
     [s[0] for s in PFW_run_iter_w],
     [s[1] for s in PFW_run_iter_w],
+    colors[2],
+    marker=markers[2],
+    markersize=size_marker,
+    markevery = np.linspace(0, len([s[0] for s in PFW_run_iter_w]) - 2, 10, dtype = int).tolist(),
+    linewidth=linewidth_figures,
     label = "PFW"
 )
 plt.semilogy(
     [s[0] for s in Lazy_run_iter_w],
     [s[1] for s in Lazy_run_iter_w],
+    colors[3],
+    marker=markers[3],
+    markersize=size_marker,
+    markevery = np.linspace(0, len([s[0] for s in Lazy_run_iter_w]) - 2, 10, dtype = int).tolist(),
+    linewidth=linewidth_figures,
     label = "Lazy"
 )
 plt.semilogy(
     [s[0] for s in DICG_run_iter_w],
     [s[1] for s in DICG_run_iter_w],
+    colors[4],
+    marker=markers[4],
+    markersize=size_marker,
+    markevery = np.linspace(0, len([s[0] for s in DICG_run_iter_w]) - 2, 10, dtype = int).tolist(),
+    linewidth=linewidth_figures,
     label = "DICG"
 )
 plt.title(
@@ -135,31 +169,56 @@ plt.subplot(1, 2, 2)
 PFLaCG_run_iter_w = [(run_status[x_index], run_status[2]- approx_f_opt) for run_status in PFLaCG_run]
 AFW_run_iter_w = [(run_status[x_index], run_status[2] - approx_f_opt) for run_status in AFW_run]
 PFW_run_iter_w = [(run_status[x_index], run_status[2] - approx_f_opt) for run_status in PFW_run]
-Lazy_run_iter_w = [(run_status[x_index], run_status[2]) for run_status in Lazy_run]
-DICG_run_iter_w = [(run_status[x_index], run_status[2]) for run_status in DICG_run]
+Lazy_run_iter_w = [(run_status[x_index], run_status[2]- approx_f_opt) for run_status in Lazy_run]
+DICG_run_iter_w = [(run_status[x_index], run_status[2]- approx_f_opt) for run_status in DIPFW_run]
 plt.semilogy(
     [s[0] for s in PFLaCG_run_iter_w],
     [s[1] for s in PFLaCG_run_iter_w],
+    colors[0],
+    marker=markers[0],
+    markersize=size_marker,
+    markevery = np.linspace(0, len([s[0] for s in PFLaCG_run_iter_w]) - 2, 10, dtype = int).tolist(),
+    linewidth=linewidth_figures,
     label = "PFLaCG"
 )
 plt.semilogy(
     [s[0] for s in AFW_run_iter_w],
     [s[1] for s in AFW_run_iter_w],
+    colors[1],
+    marker=markers[1],
+    markersize=size_marker,
+    markevery = np.linspace(0, len([s[0] for s in AFW_run_iter_w]) - 2, 10, dtype = int).tolist(),
+    linewidth=linewidth_figures,
     label = "AFW"
 )
 plt.semilogy(
     [s[0] for s in PFW_run_iter_w],
     [s[1] for s in PFW_run_iter_w],
+    colors[2],
+    marker=markers[2],
+    markersize=size_marker,
+    markevery = np.linspace(0, len([s[0] for s in PFW_run_iter_w]) - 2, 10, dtype = int).tolist(),
+    linewidth=linewidth_figures,
     label = "PFW"
 )
 plt.semilogy(
     [s[0] for s in Lazy_run_iter_w],
     [s[1] for s in Lazy_run_iter_w],
+    colors[3],
+    marker=markers[3],
+    markersize=size_marker,
+    markevery = np.linspace(0, len([s[0] for s in Lazy_run_iter_w]) - 2, 10, dtype = int).tolist(),
+    linewidth=linewidth_figures,
     label = "Lazy"
 )
 plt.semilogy(
     [s[0] for s in DICG_run_iter_w],
     [s[1] for s in DICG_run_iter_w],
+    colors[4],
+    marker=markers[4],
+    markersize=size_marker,
+    markevery = np.linspace(0, len([s[0] for s in DICG_run_iter_w]) - 2, 10, dtype = int).tolist(),
+    linewidth=linewidth_figures,
     label = "DICG"
 )
 plt.title(
@@ -171,7 +230,7 @@ plt.title(
 plt.xlabel(x_axis)
 plt.ylabel("$f - f*$")
 plt.legend()
-plt.savefig("Birkhoff_Comparison_time_standard_v12.pdf")
+plt.savefig("L1_Comparison_time_standard_v12.pdf")
 # plt.show()
 plt.close()
 
@@ -180,20 +239,57 @@ plt.subplot(1, 2, 1)
 PFLaCG_run_iter_w = [(run_status[0], run_status[4]) for run_status in PFLaCG_run]
 AFW_run_iter_w = [(run_status[0], run_status[4]) for run_status in AFW_run]
 PFW_run_iter_w = [(run_status[0], run_status[4]) for run_status in PFW_run]
+Lazy_run_iter_w = [(run_status[0], run_status[4]) for run_status in Lazy_run]
+DICG_run_iter_w = [(run_status[0], run_status[4]) for run_status in DIPFW_run]
 plt.semilogy(
     [s[0] for s in PFLaCG_run_iter_w],
     [s[1] for s in PFLaCG_run_iter_w],
+    colors[0],
+    marker=markers[0],
+    markersize=size_marker,
+    markevery = np.linspace(0, len([s[0] for s in PFLaCG_run_iter_w]) - 2, 10, dtype = int).tolist(),
+    linewidth=linewidth_figures,
     label = "PFLaCG"
 )
 plt.semilogy(
     [s[0] for s in AFW_run_iter_w],
     [s[1] for s in AFW_run_iter_w],
+    colors[1],
+    marker=markers[1],
+    markersize=size_marker,
+    markevery = np.linspace(0, len([s[0] for s in AFW_run_iter_w]) - 2, 10, dtype = int).tolist(),
+    linewidth=linewidth_figures,
     label = "AFW"
 )
 plt.semilogy(
     [s[0] for s in PFW_run_iter_w],
     [s[1] for s in PFW_run_iter_w],
+    colors[2],
+    marker=markers[2],
+    markersize=size_marker,
+    markevery = np.linspace(0, len([s[0] for s in PFW_run_iter_w]) - 2, 10, dtype = int).tolist(),
+    linewidth=linewidth_figures,
     label = "PFW"
+)
+plt.semilogy(
+    [s[0] for s in Lazy_run_iter_w],
+    [s[1] for s in Lazy_run_iter_w],
+    colors[3],
+    marker=markers[3],
+    markersize=size_marker,
+    markevery = np.linspace(0, len([s[0] for s in Lazy_run_iter_w]) - 2, 10, dtype = int).tolist(),
+    linewidth=linewidth_figures,
+    label = "Lazy"
+)
+plt.semilogy(
+    [s[0] for s in DICG_run_iter_w],
+    [s[1] for s in DICG_run_iter_w],
+    colors[4],
+    marker=markers[4],
+    markersize=size_marker,
+    markevery = np.linspace(0, len([s[0] for s in DICG_run_iter_w]) - 2, 10, dtype = int).tolist(),
+    linewidth=linewidth_figures,
+    label = "DICG"
 )
 plt.title(
     f"{type(objective_function).__name__}\n"
@@ -209,20 +305,57 @@ plt.subplot(1, 2, 2)
 PFLaCG_run_iter_w = [(run_status[0], run_status[2]- approx_f_opt) for run_status in PFLaCG_run]
 AFW_run_iter_w = [(run_status[0], run_status[2] - approx_f_opt) for run_status in AFW_run]
 PFW_run_iter_w = [(run_status[0], run_status[2] - approx_f_opt) for run_status in PFW_run]
+Lazy_run_iter_w = [(run_status[0], run_status[2]- approx_f_opt) for run_status in Lazy_run]
+DICG_run_iter_w = [(run_status[0], run_status[2]- approx_f_opt) for run_status in DIPFW_run]
 plt.semilogy(
     [s[0] for s in PFLaCG_run_iter_w],
     [s[1] for s in PFLaCG_run_iter_w],
+    colors[0],
+    marker=markers[0],
+    markersize=size_marker,
+    markevery = np.linspace(0, len([s[0] for s in PFLaCG_run_iter_w]) - 2, 10, dtype = int).tolist(),
+    linewidth=linewidth_figures,
     label = "PFLaCG"
 )
 plt.semilogy(
     [s[0] for s in AFW_run_iter_w],
     [s[1] for s in AFW_run_iter_w],
+    colors[1],
+    marker=markers[1],
+    markersize=size_marker,
+    markevery = np.linspace(0, len([s[0] for s in AFW_run_iter_w]) - 2, 10, dtype = int).tolist(),
+    linewidth=linewidth_figures,
     label = "AFW"
 )
 plt.semilogy(
     [s[0] for s in PFW_run_iter_w],
     [s[1] for s in PFW_run_iter_w],
+    colors[2],
+    marker=markers[2],
+    markersize=size_marker,
+    markevery = np.linspace(0, len([s[0] for s in PFW_run_iter_w]) - 2, 10, dtype = int).tolist(),
+    linewidth=linewidth_figures,
     label = "PFW"
+)
+plt.semilogy(
+    [s[0] for s in Lazy_run_iter_w],
+    [s[1] for s in Lazy_run_iter_w],
+    colors[3],
+    marker=markers[3],
+    markersize=size_marker,
+    markevery = np.linspace(0, len([s[0] for s in Lazy_run_iter_w]) - 2, 10, dtype = int).tolist(),
+    linewidth=linewidth_figures,
+    label = "Lazy"
+)
+plt.semilogy(
+    [s[0] for s in DICG_run_iter_w],
+    [s[1] for s in DICG_run_iter_w],
+    colors[4],
+    marker=markers[4],
+    markersize=size_marker,
+    markevery = np.linspace(0, len([s[0] for s in DICG_run_iter_w]) - 2, 10, dtype = int).tolist(),
+    linewidth=linewidth_figures,
+    label = "DICG"
 )
 plt.title(
     f"{type(objective_function).__name__}\n"
@@ -233,9 +366,11 @@ plt.title(
 plt.xlabel("Iteration")
 plt.ylabel("$f - f*$")
 plt.legend()
-plt.savefig("Birkhoff_Comparison_iteration_standard_v12.pdf")
+plt.savefig("L1_Comparison_iteration_standard_v12.pdf")
 # plt.show()
 plt.close()
+
+
 
 
 

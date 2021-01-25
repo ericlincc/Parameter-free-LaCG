@@ -323,11 +323,8 @@ class FrankWolfe(_AbstractAlgorithm):
         duration = 0.0
         f_val = objective_function.evaluate(point_x.cartesian_coordinates)
         v = feasible_region.lp_oracle(grad)
-        if self.fw_variant == "FW" or self.fw_variant == "DIPFW":
-            strong_wolfe_gap = 0.0
-        else:
-            a, index_max = feasible_region.away_oracle(grad, point_x)
-            strong_wolfe_gap = grad.dot(a.cartesian_coordinates - v)
+        a, index_max = feasible_region.away_oracle(grad, point_x)
+        strong_wolfe_gap = grad.dot(a.cartesian_coordinates - v)
 
         dual_gap = grad.dot(point_x.cartesian_coordinates - v)
 
@@ -566,11 +563,14 @@ def pairwise_step_fw(objective_function, feasible_region, point_x, step_size_par
 def dipfw(objective_function, feasible_region, point_x, step_size_param):
     grad = objective_function.evaluate_grad(point_x.cartesian_coordinates)
     v = feasible_region.lp_oracle(grad)
+    wolfe_gap = grad.dot(point_x.cartesian_coordinates - v)
+    
     grad_aux = grad.copy()
     for i in range(len(grad_aux)):
         if point_x.cartesian_coordinates[i] == 0.0:
             grad_aux[i] = -1.0e15
     a = feasible_region.lp_oracle(-grad_aux)
+    strong_wolfe_gap = grad.dot(a - v)
     d = v - a
     alpha_max = calculate_stepsize(point_x.cartesian_coordinates, d)
     assert (
@@ -587,8 +587,8 @@ def dipfw(objective_function, feasible_region, point_x, step_size_param):
     new_cartesian = point_x.cartesian_coordinates + alpha * d
     return (
         Point(new_cartesian, (1.0,), (new_cartesian,)),
-        grad.dot(point_x.cartesian_coordinates - v),
-        0.0,
+        wolfe_gap,
+        strong_wolfe_gap,
     )
 
 

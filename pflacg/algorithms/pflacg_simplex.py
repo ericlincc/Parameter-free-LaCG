@@ -850,15 +850,20 @@ class ParameterFreeAGD_simplex:
             y,
         )
 
-    # TODO: change to point_x, point_y
+    # # TODO: change to point_x, point_y
+    # @staticmethod
+    # def _check_eta_condition(objective_function, x, y, eta):
+    #     """Check if f(y) <= f(x) + <nabla f (x), y - x> + eta / 2 * ||y - x||^2."""
+    #     f_diff = objective_function.evaluate(y) - objective_function.evaluate(x)
+    #     grad_x = objective_function.evaluate_grad(x)
+    #     y_x = y - x
+    #     print("Values: ", 2.0*(f_diff - np.dot(grad_x, y_x))/np.dot(y_x, y_x), eta)
+    #     return 2.0*(f_diff - np.dot(grad_x, y_x))/np.dot(y_x, y_x) <=  eta
+    
     @staticmethod
     def _check_eta_condition(objective_function, x, y, eta):
-        """Check if f(y) <= f(x) + <nabla f (x), y - x> + eta / 2 * ||y - x||^2."""
-        f_diff = objective_function.evaluate(y) - objective_function.evaluate(x)
-        grad_x = objective_function.evaluate_grad(x)
-        y_x = y - x
-        return f_diff <= np.dot(grad_x, y_x) + eta / 2 * np.dot(y_x, y_x)
-
+        return objective_function.evaluate_smoothness_inequality(x, y) <=  0.5*eta
+    
     @staticmethod
     def _compute_a(A_, theta_max):
         """Compute largest a satisfying a / A <= theta_max."""

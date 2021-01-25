@@ -119,6 +119,10 @@ class Quadratic(_AbstractObjectiveFunction):
 
     def evaluate_grad(self, x):
         return self.M.dot(x) + self.b
+    
+    def evaluate_smoothness_inequality(self, x, y):
+        x_diff_norm = (x - y)/np.linalg.norm(x - y)
+        return 0.5 * np.dot(x_diff_norm, self.M.dot(x_diff_norm))
 
 
 class HuberLoss(_AbstractObjectiveFunction):
@@ -210,6 +214,9 @@ class RegularizedObjectiveFunction(_AbstractObjectiveFunction):
     def evaluate_grad(self, x):
         x_diff = x - self.reference_point
         return self.objective_function.evaluate_grad(x) + self.sigma * x_diff
+
+    def evaluate_smoothness_inequality(self, x, y):
+        return self.objective_function.evaluate_smoothness_inequality(x, y) + 0.5*self.sigma 
 
 
 class graphical_lasso(_AbstractObjectiveFunction):

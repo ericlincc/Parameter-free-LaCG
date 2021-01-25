@@ -110,7 +110,7 @@ class FrankWolfe_simplex(_AbstractAlgorithm):
         if self.fw_variant == "FW":
             strong_wolfe_gap = 0.0
         else:
-            a, index_max = feasible_region.away_oracle(grad, x)
+            a, index_max = feasible_region.away_oracle_fast(grad, x)
             strong_wolfe_gap = grad.dot(a - v)
 
         dual_gap = grad.dot(x - v)
@@ -184,7 +184,7 @@ class FrankWolfe_simplex(_AbstractAlgorithm):
 def away_step_fw_simplex(objective_function, feasible_region, x, step_size_param):
     grad = objective_function.evaluate_grad(x)
     v = feasible_region.lp_oracle(grad)
-    a, index_max = feasible_region.away_oracle(grad, x)
+    a, index_max = feasible_region.away_oracle_fast(grad, x)
     wolfe_gap = grad.dot(x - v)
     strong_wolfe_gap = grad.dot(a - v)
     if (2.0*wolfe_gap >strong_wolfe_gap):
@@ -218,7 +218,7 @@ def pairwise_step_fw_simplex(objective_function, feasible_region, x, step_size_p
     grad = objective_function.evaluate_grad(x)
     v = feasible_region.lp_oracle(grad)
     wolfe_gap = grad.dot(x - v)
-    a, index_max = feasible_region.away_oracle(grad, x)
+    a, index_max = feasible_region.away_oracle_fast(grad, x)
     strong_wolfe_gap = grad.dot(a - v)
     # Find the weight of the extreme point a in the decomposition.
     alpha_max = x[index_max]

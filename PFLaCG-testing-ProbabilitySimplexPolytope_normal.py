@@ -73,6 +73,8 @@ PFLaCG = ParameterFreeLaCG(iter_sync=ITER_SYNC)
 PFLaCG_run = PFLaCG.run(objective_function, feasible_region, test_exit_criterion, point_x)
 
 
+quit()
+
 # In[7]:
 
 

@@ -7,6 +7,12 @@
 from multiprocessing import shared_memory, Value, Process, Lock
 
 import matplotlib.pyplot as plt
+
+import os
+os.environ["MKL_NUM_THREADS"] = "1" 
+os.environ["NUMEXPR_NUM_THREADS"] = "1" 
+os.environ["OMP_NUM_THREADS"] = "1" 
+
 import numpy as np
 
 from pflacg.algorithms._algorithms_utils import *

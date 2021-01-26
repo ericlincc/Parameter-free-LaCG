@@ -3,7 +3,6 @@ What changed:
   - Reused quadratic in argmin_quadratic_over_active_set()
   - Remove one linear oracle call per iter in PFLaCG() in the FAFW algorithm, which now returns the wolfe gap and the strong wolfe gap.
   - Add back the smoothness inequality checking (eta condition) to take advantage of the stability for quadratics.
-  - Remove a single gradient calls per iter condition_eta_conditions()
 
 --------------------
 

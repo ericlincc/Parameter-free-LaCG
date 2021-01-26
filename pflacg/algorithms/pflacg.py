@@ -761,6 +761,8 @@ class ParameterFreeAGD:
 
     @staticmethod
     def _check_eta_condition(objective_function, point_x, point_y, eta):
+        
+        print("Value of the smoothness inequalities: ", objective_function.evaluate_smoothness_inequality(point_x.cartesian_coordinates, point_y.cartesian_coordinates), objective_function.evaluate_smoothness_inequalities_test(point_x.cartesian_coordinates, point_y.cartesian_coordinates) )
         return objective_function.evaluate_smoothness_inequality(point_x.cartesian_coordinates, point_y.cartesian_coordinates) <=  0.5*eta
 
     @staticmethod

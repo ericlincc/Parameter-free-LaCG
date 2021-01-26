@@ -138,6 +138,12 @@ class Quadratic(_AbstractObjectiveFunction):
         x_diff_norm = (x - y)/np.linalg.norm(x - y)
         return 0.5 * np.dot(x_diff_norm, self.M.dot(x_diff_norm))
 
+    def evaluate_smoothness_inequalities_test(self, x, y):
+        f_diff = self.evaluate(y) - self.evaluate(x)
+        grad_x = self.evaluate_grad(x)
+        y_x = y - x
+        return  (f_diff - np.dot(grad_x, y_x))/np.dot(y_x, y_x)
+
 class HuberLoss(_AbstractObjectiveFunction):
     """If distance(x - ref) <= radius, then Quadratic, else Linear."""
 
@@ -213,11 +219,11 @@ class RegularizedObjectiveFunction(_AbstractObjectiveFunction):
 
     @property
     def smallest_eigenvalue(self):
-        return self.objective_function.smallest_eigenvalue + sigma
+        return self.objective_function.smallest_eigenvalue + self.sigma
 
     @property
     def largest_eigenvalue(self):
-        return self.objective_function.largest_eigenvalue + sigma
+        return self.objective_function.largest_eigenvalue + self.sigma
 
     def line_search(self, grad, d):
         pass

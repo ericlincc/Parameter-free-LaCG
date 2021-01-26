@@ -73,6 +73,11 @@ def accelerated_projected_gradient_descent_over_simplex_jit(
     grad = f_evaluate_grad(x, quadratic, linear, constant)
     wolfe_gap = grad.dot(x - simplex_lp_oracle(grad))
 
+    num_elem_moving_average = 20
+    moving_average = np.zeros(num_elem_moving_average)
+    moving_average[0] = wolfe_gap
+    num_total_elements = 1
+
     while not has_met_stopping_criterion(
         x, wolfe_gap, active_set, reference_x, tolerance_type, tolerance
     ):
@@ -95,9 +100,18 @@ def accelerated_projected_gradient_descent_over_simplex_jit(
         grad = f_evaluate_grad(x, quadratic, linear, constant)
         _wolfe_gap = wolfe_gap
         wolfe_gap = grad.dot(x - simplex_lp_oracle(grad))
-
+        
+        if(num_total_elements < num_elem_moving_average):
+            num_total_elements += 1
+        for i in range(0, num_total_elements - 1):
+            moving_average[num_total_elements - 1 - i] = moving_average[num_total_elements - 2 - i]
+        moving_average[0] = wolfe_gap
+        
+        old_wolfe_gap = np.mean(moving_average[0:int(num_total_elements/2.0)])
+        new_wolfe_gap = np.mean(moving_average[int(num_total_elements/2.0):num_total_elements])
+        
         # Detecting if subproblem is stuck
         # TODO: Use moving average instead
-        if abs(wolfe_gap - _wolfe_gap) <= 1e-12 and wolfe_gap < 1e-11:
+        if abs(old_wolfe_gap - new_wolfe_gap) <= 1e-12 and wolfe_gap < 1e-11:
             return np.zeros(len(initial_x))
     return x

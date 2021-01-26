@@ -55,7 +55,7 @@ optimal_exit_criterion = ExitCriterion(
     max_time=600.0,
     max_iter=10000
 )
-dimension = 10000
+dimension = 1000
 
 
 matrix = np.random.rand(dimension, dimension)

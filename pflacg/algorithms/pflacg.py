@@ -650,28 +650,20 @@ class ParameterFreeAGD:
                 base_quadratic=base_quadratic,
             )
 
-            # eta_x_yh = self._check_eta_condition(
-            #     objective_function,
-            #     point_x.cartesian_coordinates,
-            #     point_yh.cartesian_coordinates,
-            #     eta,
-            # )
-            # eta_yh_y = self._check_eta_condition(
-            #     objective_function,
-            #     point_yh.cartesian_coordinates,
-            #     point_y.cartesian_coordinates,
-            #     eta,
-            # )
-            
-            eta_conditions = self._check_eta_condition(
+            eta_x_yh = self._check_eta_condition(
                 objective_function,
-                point_x.cartesian_coordinates,
-                point_y.cartesian_coordinates,
-                point_yh.cartesian_coordinates,
+                point_x,
+                point_yh,
+                eta,
+            )
+            eta_yh_y = self._check_eta_condition(
+                objective_function,
+                point_yh,
+                point_y,
                 eta,
             )
             
-            if eta_conditions:
+            if eta_x_yh and eta_yh_y:
                 eta_flag = True
             else:
                 eta = self.estimate_ratio * eta  # Maybe udpate a global eta too
@@ -767,43 +759,9 @@ class ParameterFreeAGD:
             point_y,
         )
 
-    # # TODO: change to point_x, point_y
-    # @staticmethod
-    # def _check_eta_condition(objective_function, x, y, eta):
-    #     f_diff = objective_function.evaluate(y) - objective_function.evaluate(x)
-    #     grad_x = objective_function.evaluate_grad(x)
-    #     y_x = y - x
-    #     return f_diff <= np.dot(grad_x, y_x) + eta / 2 * np.dot(y_x, y_x)
-
     @staticmethod
-    def _check_eta_condition(objective_function, x, y, yh, eta):
-        """Check if (f(yh) - f(x) - <nabla f (x), yh - x>)/||yh - x||^2 <=  eta / 2."""
-        """and (f(y) - f(yh) - <nabla f (yh), y - yh>)/||y - yh||^2 <=  eta / 2."""
-        value1, value2 = objective_function.evaluate_smoothness_inequalities(x, y, yh)
-        value1_test, value2_test = objective_function.evaluate_smoothness_inequalities_test(x, y, yh)
-        
-        output1 = value1 - value1_test
-        output2 = value2 - value2_test
-        LOGGER.info(f"Output val1: eta = {output1}, {value1}, {value1_test}")
-        LOGGER.info(f"Output val1: eta = {output2}, {value2}, {value2_test}")
-        
-        print(value1 - value1_test, value2 - value2_test)
-        
-        return  value1 <=  0.5*eta and value2 <= 0.5*eta
-
-            # eta_x_yh = self._check_eta_condition(
-            #     objective_function,
-            #     point_x.cartesian_coordinates,
-            #     point_yh.cartesian_coordinates,
-            #     eta,
-            # )
-            # eta_yh_y = self._check_eta_condition(
-            #     objective_function,
-            #     point_yh.cartesian_coordinates,
-            #     point_y.cartesian_coordinates,
-            #     eta,
-            # )
-            
+    def _check_eta_condition(objective_function, point_x, point_y, eta):
+        return objective_function.evaluate_smoothness_inequality(point_x.cartesian_coordinates, point_y.cartesian_coordinates) <=  0.5*eta
 
     @staticmethod
     def _compute_a(A_, theta_max):

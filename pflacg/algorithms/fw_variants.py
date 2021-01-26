@@ -4,24 +4,24 @@
 from copy import deepcopy
 import logging
 import time
+
 import numpy as np
 
 from pflacg.algorithms._abstract_algorithm import _AbstractAlgorithm
-
 from pflacg.algorithms._algorithms_utils import (
     Point,
     step_size,
     DISPLAY_DECIMALS,
-    new_vertex_fail_fast,
-    delete_vertex_index,
     calculate_stepsize,
 )
 
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(levelname)s :: %(asctime)s :: %(message)s",
-    datefmt="%Y-%m-%d %H:%M:%S",
-)
+
+if __name__ == "__main__":
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(levelname)s :: %(asctime)s :: %(message)s",
+        datefmt="%Y-%m-%d %H:%M:%S",
+    )
 LOGGER = logging.getLogger()
 
 

@@ -7,9 +7,9 @@ import datetime
 import logging
 import json
 from os import path, mkdir
+import pickle
 import time
 import sys
-import pickle
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -20,11 +20,12 @@ import pflacg.experiments.objective_functions as objective_functions
 import pflacg.experiments.experiments_helper as helper
 
 
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(levelname)s :: %(asctime)s :: %(message)s",
-    datefmt="%Y-%m-%d %H:%M:%S",
-)
+if __name__ == "__main__":
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(levelname)s :: %(asctime)s :: %(message)s",
+        datefmt="%Y-%m-%d %H:%M:%S",
+    )
 LOGGER = logging.getLogger()
 
 

@@ -1,11 +1,24 @@
 # codeing=utf-8
 """This module contains objective functions for the experiements."""
 
+
 from abc import ABC, abstractmethod
+import logging
+
 import numpy as np
 from scipy.sparse import csc_matrix
 from scipy.optimize import minimize_scalar
 from scipy.sparse.linalg import splu
+
+
+if __name__ == "__main__":
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(levelname)s :: %(asctime)s :: %(message)s",
+        datefmt="%Y-%m-%d %H:%M:%S",
+    )
+LOGGER = logging.getLogger()
+
 
 # Helper functions
 
@@ -41,7 +54,8 @@ def random_psd_generator_sparse(dim, sparsity):
 
 
 def random_psd_generator(dim, Mu, L):
-    # TODO: Alex, can you add docstring here describing what this does?
+    """TODO: Add description."""
+
     eigenval = np.zeros(dim)
     eigenval[0] = Mu
     eigenval[-1] = L
@@ -212,7 +226,9 @@ class RegularizedObjectiveFunction(_AbstractObjectiveFunction):
         return self.objective_function.evaluate_grad(x) + self.sigma * x_diff
 
 
-class graphical_lasso(_AbstractObjectiveFunction):
+class GraphicalLasso(_AbstractObjectiveFunction):
+    """TODO: Add description."""
+
     def __init__(self, n, S, lambaVal, delta=0.0):
         self.dim = n
         self.S = S
@@ -261,7 +277,9 @@ class graphical_lasso(_AbstractObjectiveFunction):
         return logdet.real
 
 
-class logistic_regression(_AbstractObjectiveFunction):
+class LogisticRegression(_AbstractObjectiveFunction):
+    """TODO: Add description."""
+
     def __init__(self, n, numSamples, samples, labels, mu=0.0):
         self.samples = samples.copy()
         self.labels = labels.copy()

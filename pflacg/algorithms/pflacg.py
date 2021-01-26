@@ -18,11 +18,12 @@ from pflacg.algorithms.project_onto_active_set_jit import (
 )
 
 
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(levelname)s :: %(asctime)s :: %(message)s",
-    datefmt="%Y-%m-%d %H:%M:%S",
-)
+if __name__ == "__main__":
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(levelname)s :: %(asctime)s :: %(message)s",
+        datefmt="%Y-%m-%d %H:%M:%S",
+    )
 LOGGER = logging.getLogger()
 
 
@@ -34,6 +35,8 @@ MAX_NUM_WAIT_INTERVALS = 3000
 
 
 class ParameterFreeLaCG(_AbstractAlgorithm):
+    """TODO: Add descriptions and reference."""
+
     def __init__(
         self,
         fw_variant="AFW",
@@ -296,19 +299,22 @@ class ParameterFreeAGD:
         initial_sigma=None,
         shared_buffers_dict=None,
         last_restart_iter=0,
-        epsilon_f=1e-3,
+        epsilon_f=1e-12,
     ):
         """Run PF-ACC given an initial point and an active set/feasible region.
 
         Returns
         -------
-
+        list(run_status)
         """
+
         LOGGER.info(f"ACC process started at last_restart_iter = {last_restart_iter}")
         if len(feasible_region.vertices) <= 1:
             return point_initial, initial_eta, initial_sigma, 0
 
-        dim = objective_function.dim
+        # Precomputations
+        matrix = np.vstack(feasible_region.vertices)
+        base_quadratic = matrix.dot(matrix.T)
 
         # Initial shared buffers based on shared_buffers_dict
         if shared_buffers_dict:
@@ -319,7 +325,9 @@ class ParameterFreeAGD:
                 name=shared_buffers_dict["ret_x_cartesian_coordinates"]
             )
             ret_x_cartesian_coordinates = np.ndarray(
-                shape=dim, dtype=np.float64, buffer=ret_x_cartesian_coordinates_shm.buf
+                shape=objective_function.dim,
+                dtype=np.float64,
+                buffer=ret_x_cartesian_coordinates_shm.buf,
             )
 
             ret_x_barycentric_coordinates_shm = shared_memory.SharedMemory(
@@ -397,6 +405,7 @@ class ParameterFreeAGD:
             reference_point=point_x,
             tolerance_type="gradient mapping",
             tolerance=eta / 32,
+            base_quadratic=base_quadratic,
         )
         LOGGER.info("1st time argmin_quadratic_over_active_set ended")
         grad_mapping = (
@@ -412,6 +421,7 @@ class ParameterFreeAGD:
                 sigma=sigma,
                 global_eta=global_eta,
                 global_sigma=global_sigma,
+                base_quadratic=base_quadratic,
                 epsilon_f=epsilon_f,
             )
             iteration += _iteration
@@ -465,6 +475,7 @@ class ParameterFreeAGD:
         sigma,
         global_eta=None,
         global_sigma=None,
+        base_quadratic=None,
         epsilon_f=1e-8,
     ):
         """Executes one call of ACC from Algorithm 4 in the paper.
@@ -512,6 +523,7 @@ class ParameterFreeAGD:
                 reference_point=point_x,
                 tolerance_type="gradient mapping",
                 tolerance=(eta_0 + sigma) / 32,
+                base_quadratic=base_quadratic,
             )
             epsilon_0 = ((eta_0 + sigma) / 32) * (
                 np.linalg.norm(
@@ -563,7 +575,8 @@ class ParameterFreeAGD:
                     epsilon_0,
                     eta_0,
                     global_eta=global_eta,
-                    epsilon_f=1e-8,
+                    base_quadratic=base_quadratic,
+                    epsilon_f=epsilon_f,
                 )
                 iteration += _iteration
 
@@ -607,6 +620,7 @@ class ParameterFreeAGD:
         epsilon_0,
         eta_0,
         global_eta=None,
+        base_quadratic=None,
         epsilon_f=1e-8,
     ):
         """Executing one AGD-Iter as described in Algo 1 of the paper."""
@@ -636,6 +650,7 @@ class ParameterFreeAGD:
                 epsilon_l,
                 epsilon_M,
                 eta_0,
+                base_quadratic=base_quadratic,
             )
 
             eta_x_yh = self._check_eta_condition(
@@ -679,6 +694,7 @@ class ParameterFreeAGD:
         epsilon_l,
         epsilon_M,
         eta_0,
+        base_quadratic=None,
     ):
         """Compute x_k, y_k and y_k^+ according to a smoothness estimate eta.
         Parameters
@@ -723,6 +739,7 @@ class ParameterFreeAGD:
             reference_point=point_x,
             tolerance_type="dual gap",
             tolerance=epsilon_M,
+            base_quadratic=base_quadratic,
         )
         point_yh = (1 - theta) * point_y_ + theta * point_v
         point_y = argmin_quadratic_over_active_set(
@@ -735,6 +752,7 @@ class ParameterFreeAGD:
             reference_point=point_yh,
             tolerance_type="dual gap",
             tolerance=1e-10,
+            base_quadratic=base_quadratic,
         )
         return (
             point_x,
@@ -762,6 +780,8 @@ class ParameterFreeAGD:
 
 
 class FractionalAwayStepFW:
+    """TODO: Add descriptions and reference."""
+
     def __init__(self, fw_variant="AFW", ratio=0.5, **kwargs):
         assert (
             fw_variant == "AFW" or fw_variant == "PFW"

@@ -11,11 +11,12 @@ from scipy.sparse.linalg import eigsh
 from pflacg.experiments.experiments_helper import max_vertex
 
 
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(levelname)s :: %(asctime)s :: %(message)s",
-    datefmt="%Y-%m-%d %H:%M:%S",
-)
+if __name__ == "__main__":
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(levelname)s :: %(asctime)s :: %(message)s",
+        datefmt="%Y-%m-%d %H:%M:%S",
+    )
 LOGGER = logging.getLogger()
 
 
@@ -238,7 +239,9 @@ class L2UnitBallPolytope(_AbstractFeasibleRegion):
         return x / np.linalg.norm(x)
 
 
-class spectrahedron(_AbstractFeasibleRegion):
+class Spectrahedron(_AbstractFeasibleRegion):
+    """TODO: Add description."""
+
     def __init__(self, dim):
         self.dim = dim
         self.matdim = int(np.sqrt(dim))
@@ -259,6 +262,8 @@ class spectrahedron(_AbstractFeasibleRegion):
     def away_oracle(self, grad, point_x):
         return max_vertex(grad, point_x.support)
 
+
+# TODO: Some of the following functions should go into experiment_helper.py
 
 import networkx as nx
 
@@ -298,7 +303,7 @@ Growing network with redirection (GNR) digraph
 """
 
 
-class flow_polytope(_AbstractFeasibleRegion):
+class FlowPolytope(_AbstractFeasibleRegion):
     """Shortest path problem on a DAG."""
 
     def __init__(self, param1, param2, typeGraph="Structured"):

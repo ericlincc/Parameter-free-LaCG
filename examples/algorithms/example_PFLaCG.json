@@ -1,0 +1,8 @@
+[
+    {
+        "name" : "PFLaCG",
+        "class_name" : "ParameterFreeLaCG",
+        "args" : { "fw_variant" : "AFW"
+        }
+    }
+]

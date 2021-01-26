@@ -54,8 +54,14 @@ class ParameterFreeLaCG(_AbstractAlgorithm):
         objective_function,
         feasible_region,
         exit_criterion,
-        point_initial,
+        point_initial = None,
     ):
+
+        if point_initial is None:
+            vertex = feasible_region.initial_point.copy()
+            point_initial = Point(vertex, (1.0,), (vertex,))
+        else:
+            point_initial = point_initial
 
         # Initialization
         strong_wolfe_gap_out = compute_strong_wolfe_gap(

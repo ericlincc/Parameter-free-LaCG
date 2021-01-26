@@ -6,7 +6,7 @@ import argparse
 import datetime
 import logging
 import json
-from os import path, mkdir
+from os import path, mkdir, system
 import pickle
 import time
 import sys
@@ -66,6 +66,8 @@ def dump_pickled_object(filepath, target_object):
 
 def run_algorithms(args):
     """Run algorithms given objective function and feasible region, then save data."""
+
+    system("py3clean .")
 
     # Save timestamp for later identification
     timestamp = get_current_timestamp()

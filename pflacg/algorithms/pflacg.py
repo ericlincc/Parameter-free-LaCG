@@ -510,10 +510,11 @@ class ParameterFreeAGD:
         while not sigma_flag:
 
             # Initialization
+            grad_x = objective_function.evaluate_grad(point_x.cartesian_coordinates)
             point_y = argmin_quadratic_over_active_set(
                 quadratic_coefficient=(eta_0 + sigma) / 2.0,
                 linear_vector=(
-                    objective_function.evaluate_grad(point_x.cartesian_coordinates)
+                    grad_x
                     - (eta_0 + sigma) * point_x.cartesian_coordinates
                 ),
                 active_set=feasible_region.vertices,
@@ -532,9 +533,7 @@ class ParameterFreeAGD:
             point_yh = point_y
             z = (
                 eta_0 + sigma
-            ) * point_x.cartesian_coordinates - objective_function.evaluate_grad(
-                point_x.cartesian_coordinates
-            )
+            ) * point_x.cartesian_coordinates - grad_x
             a = 1.0
             A = 1.0
 
@@ -761,8 +760,6 @@ class ParameterFreeAGD:
 
     @staticmethod
     def _check_eta_condition(objective_function, point_x, point_y, eta):
-        
-        print("Value of the smoothness inequalities: ", objective_function.evaluate_smoothness_inequality(point_x.cartesian_coordinates, point_y.cartesian_coordinates), objective_function.evaluate_smoothness_inequalities_test(point_x.cartesian_coordinates, point_y.cartesian_coordinates) )
         return objective_function.evaluate_smoothness_inequality(point_x.cartesian_coordinates, point_y.cartesian_coordinates) <=  0.5*eta
 
     @staticmethod

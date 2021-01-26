@@ -163,7 +163,7 @@ class ParameterFreeLaCG(_AbstractAlgorithm):
 
             LOGGER.info("Running FAFW")
             # Run FAFW and wait for the output
-            point_x_FAFW = self.FAFW.run(
+            point_x_FAFW, _, strong_wolfe_gap_FAFW = self.FAFW.run(
                 objective_function,
                 feasible_region,
                 point_x_FAFW,
@@ -207,9 +207,6 @@ class ParameterFreeLaCG(_AbstractAlgorithm):
             strong_wolfe_gap_ACC_prev = strong_wolfe_gap_ACC
             strong_wolfe_gap_ACC = compute_strong_wolfe_gap(
                 point_x_ACC, objective_function, feasible_region
-            )
-            strong_wolfe_gap_FAFW = compute_strong_wolfe_gap(
-                point_x_FAFW, objective_function, feasible_region
             )
             assert (
                 strong_wolfe_gap_FAFW <= target_accuracy
@@ -653,20 +650,28 @@ class ParameterFreeAGD:
                 base_quadratic=base_quadratic,
             )
 
-            eta_x_yh = self._check_eta_condition(
+            # eta_x_yh = self._check_eta_condition(
+            #     objective_function,
+            #     point_x.cartesian_coordinates,
+            #     point_yh.cartesian_coordinates,
+            #     eta,
+            # )
+            # eta_yh_y = self._check_eta_condition(
+            #     objective_function,
+            #     point_yh.cartesian_coordinates,
+            #     point_y.cartesian_coordinates,
+            #     eta,
+            # )
+            
+            eta_conditions = self._check_eta_condition(
                 objective_function,
                 point_x.cartesian_coordinates,
-                point_yh.cartesian_coordinates,
-                eta,
-            )
-            eta_yh_y = self._check_eta_condition(
-                objective_function,
-                point_yh.cartesian_coordinates,
                 point_y.cartesian_coordinates,
+                point_yh.cartesian_coordinates,
                 eta,
             )
-
-            if eta_x_yh and eta_yh_y:
+            
+            if eta_conditions:
                 eta_flag = True
             else:
                 eta = self.estimate_ratio * eta  # Maybe udpate a global eta too
@@ -762,14 +767,43 @@ class ParameterFreeAGD:
             point_y,
         )
 
-    # TODO: change to point_x, point_y
+    # # TODO: change to point_x, point_y
+    # @staticmethod
+    # def _check_eta_condition(objective_function, x, y, eta):
+    #     f_diff = objective_function.evaluate(y) - objective_function.evaluate(x)
+    #     grad_x = objective_function.evaluate_grad(x)
+    #     y_x = y - x
+    #     return f_diff <= np.dot(grad_x, y_x) + eta / 2 * np.dot(y_x, y_x)
+
     @staticmethod
-    def _check_eta_condition(objective_function, x, y, eta):
-        """Check if f(y) <= f(x) + <nabla f (x), y - x> + eta / 2 * ||y - x||^2."""
-        f_diff = objective_function.evaluate(y) - objective_function.evaluate(x)
-        grad_x = objective_function.evaluate_grad(x)
-        y_x = y - x
-        return f_diff <= np.dot(grad_x, y_x) + eta / 2 * np.dot(y_x, y_x)
+    def _check_eta_condition(objective_function, x, y, yh, eta):
+        """Check if (f(yh) - f(x) - <nabla f (x), yh - x>)/||yh - x||^2 <=  eta / 2."""
+        """and (f(y) - f(yh) - <nabla f (yh), y - yh>)/||y - yh||^2 <=  eta / 2."""
+        value1, value2 = objective_function.evaluate_smoothness_inequalities(x, y, yh)
+        value1_test, value2_test = objective_function.evaluate_smoothness_inequalities_test(x, y, yh)
+        
+        output1 = value1 - value1_test
+        output2 = value2 - value2_test
+        LOGGER.info(f"Output val1: eta = {output1}, {value1}, {value1_test}")
+        LOGGER.info(f"Output val1: eta = {output2}, {value2}, {value2_test}")
+        
+        print(value1 - value1_test, value2 - value2_test)
+        
+        return  value1 <=  0.5*eta and value2 <= 0.5*eta
+
+            # eta_x_yh = self._check_eta_condition(
+            #     objective_function,
+            #     point_x.cartesian_coordinates,
+            #     point_yh.cartesian_coordinates,
+            #     eta,
+            # )
+            # eta_yh_y = self._check_eta_condition(
+            #     objective_function,
+            #     point_yh.cartesian_coordinates,
+            #     point_y.cartesian_coordinates,
+            #     eta,
+            # )
+            
 
     @staticmethod
     def _compute_a(A_, theta_max):
@@ -807,7 +841,7 @@ class FractionalAwayStepFW:
 
         fw_algorithm = FrankWolfe(self.fw_variant, "line_search")
         exit_criterion = ExitCriterion("SWG", target_accuracy)
-        point_out = fw_algorithm.run(
+        point_out, dual_gap_out, strong_wolfe_gap_out = fw_algorithm.run(
             objective_function,
             feasible_region,
             exit_criterion,
@@ -815,4 +849,4 @@ class FractionalAwayStepFW:
             save_and_output_results=False,
             global_iter=global_iter,
         )
-        return point_out
+        return point_out, dual_gap_out, strong_wolfe_gap_out

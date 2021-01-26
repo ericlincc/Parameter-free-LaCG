@@ -134,6 +134,17 @@ class Quadratic(_AbstractObjectiveFunction):
     def evaluate_grad(self, x):
         return self.M.dot(x) + self.b
 
+    def evaluate_smoothness_inequalities(self, x, y, yh):
+        x_yh_diff_norm = (x - yh)/np.linalg.norm(x - yh)
+        yh_y_diff_norm = (yh - y)/np.linalg.norm(yh - y)
+        return 0.5 * np.dot(x_yh_diff_norm, self.M.dot(x_yh_diff_norm)), 0.5 * np.dot(yh_y_diff_norm, self.M.dot(yh_y_diff_norm))
+
+    def evaluate_smoothness_inequalities_test(self, x, y, yh):
+        f_yh = self.evaluate(yh)
+        yh_x = yh - x
+        y_yh = y - yh
+        return (f_yh - self.evaluate(x) - self.evaluate_grad(x).dot(yh_x))/np.dot(yh_x, yh_x) , (self.evaluate(y) - f_yh - self.evaluate_grad(yh).dot(y_yh))/np.dot(y_yh, y_yh)
+
 
 class HuberLoss(_AbstractObjectiveFunction):
     """If distance(x - ref) <= radius, then Quadratic, else Linear."""
@@ -181,7 +192,12 @@ class HuberLoss(_AbstractObjectiveFunction):
             return x - self.ref
         else:
             return self.rad / dist * (x - self.ref)
-
+   
+    def evaluate_smoothness_inequalities(self, x, y, yh):
+        f_yh = self.objective_function.evaluate(yh)
+        yh_x = yh - x
+        y_yh = y - yh
+        return (f_yh - self.objective_function.evaluate(x) - self.objective_function.evaluate_grad(x).dot(yh_x))/np.dot(yh_x, yh_x) , (self.objective_function.evaluate(y) - f_yh - self.objective_function.evaluate_grad(yh).dot(y_yh))/np.dot(y_yh, y_yh)
 
 class RegularizedObjectiveFunction(_AbstractObjectiveFunction):
     """Regularize an objective function with a quadratic function.
@@ -225,6 +241,9 @@ class RegularizedObjectiveFunction(_AbstractObjectiveFunction):
         x_diff = x - self.reference_point
         return self.objective_function.evaluate_grad(x) + self.sigma * x_diff
 
+    def evaluate_smoothness_inequalities(self, x, y, yh):
+        val1, val2 = self.objective_function.evaluate_smoothness_inequalities(x, y, yh)
+        return val1 + 0.5*self.sigma, val2 + 0.5*self.sigma
 
 class GraphicalLasso(_AbstractObjectiveFunction):
     """TODO: Add description."""
@@ -276,6 +295,12 @@ class GraphicalLasso(_AbstractObjectiveFunction):
         logdet = np.log(diagL).sum() + np.log(diagU).sum()
         return logdet.real
 
+    def evaluate_smoothness_inequalities(self, x, y, yh):
+        f_yh = self.objective_function.evaluate(yh)
+        yh_x = yh - x
+        y_yh = y - yh
+        return (f_yh - self.objective_function.evaluate(x) - self.objective_function.evaluate_grad(x).dot(yh_x))/np.dot(yh_x, yh_x) , (self.objective_function.evaluate(y) - f_yh - self.objective_function.evaluate_grad(yh).dot(y_yh))/np.dot(y_yh, y_yh)
+
 
 class LogisticRegression(_AbstractObjectiveFunction):
     """TODO: Add description."""
@@ -320,3 +345,9 @@ class LogisticRegression(_AbstractObjectiveFunction):
                 InnerFunction, bounds=(0, maxStep), method="bounded", options=options
             )
         return res.x
+
+    def evaluate_smoothness_inequalities(self, x, y, yh):
+        f_yh = self.objective_function.evaluate(yh)
+        yh_x = yh - x
+        y_yh = y - yh
+        return (f_yh - self.objective_function.evaluate(x) - self.objective_function.evaluate_grad(x).dot(yh_x))/np.dot(yh_x, yh_x) , (self.objective_function.evaluate(y) - f_yh - self.objective_function.evaluate_grad(yh).dot(y_yh))/np.dot(y_yh, y_yh)

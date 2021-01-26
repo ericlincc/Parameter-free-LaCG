@@ -1,0 +1,48 @@
+What changed:
+  - Renamed a few classes, functions and variables to match Python PEP8 standards.
+  - Reused quadratic in argmin_quadratic_over_active_set()
+  - Remove one linear oracle call per iter in PFLaCG() in the FAFW algorithm, which now returns the wolfe gap and the strong wolfe gap.
+  - Add back the smoothness inequality checking (eta condition) to take advantage of the stability for quadratics.
+  - Remove a single gradient calls per iter condition_eta_conditions()
+
+--------------------
+
+(Imminent) TODOs:
+  - Verify that we can use fw_variant="PFW" in PFLaCG()
+  - Verify that experiment_driver.py is working with PFLaCG
+  - Update the README.md to include basic instructions
+
+--------------------
+
+Side notes:
+  - Can use the command "py3clean ." when at the root of repo to clear all python cache
+
+--------------------
+
+(Can be defered) TODOs:
+
+pflacg.py
+  - Add descriptions in ParameterFreeLaCG and FractionalAwayStepFW()
+
+project_onto_active_set_jit.py
+  - Add description in accelerated_projected_gradient_descent_over_simplex_jit()
+  - Not a TODO but these parameters may need tunings: 1e-15 and 1e-11 in line 140
+
+_algorithms_utils.py
+  - Add description in argmin_quadratic_over_active_set()
+  - Can we remove smoothnessEstimate()?
+  - Need both max_min_vertices()?
+  - We are not using delete_vertex_index() in fw_variants.py. Remove or keep it for now?
+  - We are not using new_vertex_fail_fast() in fw_variants.py. Remove or keep it for now?
+  - We are not using backtracking_step_size() in fw_variants.py. Remove it or keep it for now?
+
+fw_variants.py
+  - A lot of function/class descriptions are missing or not up-to-date.
+
+objective_functions.py
+  - Add description in random_psd_generator_sparse()
+  - Add descriptions in LogisticRegression() and GraphicalLasso()
+
+feasible_regions.py
+  - Add description in Spectrahedron()
+  - Move helpers for FlowPolytope() to the top or into experiment_helper.py

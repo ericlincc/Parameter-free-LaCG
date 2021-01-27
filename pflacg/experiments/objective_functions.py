@@ -6,9 +6,8 @@ from abc import ABC, abstractmethod
 import logging
 
 import numpy as np
-from scipy.sparse import csc_matrix
 from scipy.optimize import minimize_scalar
-from scipy.sparse.linalg import splu
+from scipy.sparse.linalg import splu, eigs
 
 
 if __name__ == "__main__":
@@ -119,9 +118,11 @@ class Quadratic(_AbstractObjectiveFunction):
     def dim(self):
         return self._dim
 
+    @property
     def smallest_eigenvalue(self):
         return self.Mu
 
+    @property
     def largest_eigenvalue(self):
         return self.L
 
@@ -137,6 +138,46 @@ class Quadratic(_AbstractObjectiveFunction):
     def evaluate_smoothness_inequality(self, x, y):
         x_diff_norm = (x - y) / np.linalg.norm(x - y)
         return 0.5 * np.dot(x_diff_norm, self.M.dot(x_diff_norm))
+
+
+class QuadraticSparse(_AbstractObjectiveFunction):
+    """Given matrix M and vector b, f(x) = 0.5 x^T M * x + b^T x."""
+
+    def __init__(self, dim, M_sparse, b):
+        self._dim = dim
+        if type(M_sparse).__name__ in ("csr_matrix", "csc_matrix"):
+            self.M_sparse = M_sparse
+        else:
+            raise TypeError("M_sparse should be a csr_matrix.")
+        self.b = b
+        self.L = np.real(eigs(self.M_sparse, k=1, which="LR", return_eigenvectors=False)[0])
+        self.Mu = np.real(eigs(self.M_sparse, k=1, which="SR", return_eigenvectors=False)[0])
+
+    @property
+    def dim(self):
+        return self._dim
+
+    @property
+    def smallest_eigenvalue(self):
+        return self.Mu
+
+    @property
+    def largest_eigenvalue(self):
+        return self.L
+
+    def line_search(self, grad, d, x):
+        return -np.dot(grad, d) / np.dot(d, self.M_sparse.dot(d))
+
+    def evaluate(self, x):
+        return 0.5 * np.dot(x, self.M_sparse.dot(x)) + np.dot(self.b, x)
+
+    def evaluate_grad(self, x):
+        return self.M_sparse.dot(x) + self.b
+
+    def evaluate_smoothness_inequality(self, x, y):
+        x_diff_norm = (x - y) / np.linalg.norm(x - y)
+        return 0.5 * np.dot(x_diff_norm, self.M_sparse.dot(x_diff_norm))
+
 
 
 class HuberLoss(_AbstractObjectiveFunction):

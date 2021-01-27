@@ -6,13 +6,12 @@ import argparse
 import datetime
 import logging
 import json
-from os import path, mkdir
+from os import environ, mkdir, path, system
 import pickle
 import time
 import sys
 
 import matplotlib.pyplot as plt
-import numpy as np
 
 import pflacg.algorithms as algorithms
 import pflacg.experiments.feasible_regions as feasible_regions
@@ -69,6 +68,31 @@ def run_algorithms(args):
 
     # Save timestamp for later identification
     timestamp = get_current_timestamp()
+
+    # Reconfigure logging to save to file
+    if args.save_logging:
+        logging_filename = path.join(args.save_location, f"run_log-{timestamp}")
+        for handler in logging.root.handlers[:]:
+            logging.root.removeHandler(handler)
+        logging.basicConfig(
+            filename=logging_filename,
+            level=logging.INFO,
+            format="%(levelname)s :: %(asctime)s :: %(message)s",
+            datefmt="%Y-%m-%d %H:%M:%S",
+        )
+
+    # Clean all caches in __pycache__ directories
+    if args.clear_pycache:
+        system("py3clean .")
+
+    # Limit numpy to use one CPU core by setting MKL single-thread only. This must be
+    # done before numpy is imported for the first time.
+    # This setting is machine-specific and can be brittle.
+    if args.single_cpu_mode:
+        environ["MKL_NUM_THREADS"] = "1"
+        environ["NUMEXPR_NUM_THREADS"] = "1"
+        environ["OMP_NUM_THREADS"] = "1"
+    import numpy as np
 
     # Set random seed if given
     if args.random_seed:
@@ -229,7 +253,13 @@ def plot_results(args):
 
     # TODO: add safety checks
 
-    run_status_index = {"iteration": 0, "time": 1, "primal_gap": 2, "wolfe_gap": 3}
+    run_status_index = {
+        "iteration": 0,
+        "time": 1,
+        "primal_gap": 2,
+        "wolfe_gap": 3,
+        "strong_wolfe_gap": 4,
+    }
     if args.y_axis == "primal_gap":
         ref_opt = args.known_optimal_f_val
         plt.ylabel(r"$f(x_k) - f(x^*)$")
@@ -237,7 +267,7 @@ def plot_results(args):
         ref_opt = 0.0
         plt.ylabel(r"$g(x_k)$")
     if args.x_axis == "time":
-        plt.xlabel(r"Time [s]")
+        plt.xlabel(r"t[s]")
     else:
         plt.xlabel(r"$k$")
 
@@ -332,9 +362,24 @@ def run_algorithms_parser(argv_remaining):
         help="Seed for random",
     )
     parser.add_argument(
+        "--save_logging",
+        action="store_true",
+        help="Save execution logs to file.",
+    )
+    parser.add_argument(
         "--save_objects",
         action="store_true",
         help="Saving all experiment objects of later use.",
+    )
+    parser.add_argument(
+        "--clear_pycache",
+        action="store_true",
+        help="Cleaning all python cache in __pycache__",
+    )
+    parser.add_argument(
+        "--single_cpu_mode",
+        action="store_true",
+        help="Limiting each process to use at most one CPU core.",
     )
     return parser.parse_known_args(argv_remaining)
 
@@ -367,8 +412,8 @@ def plot_results_parser(argv_remaining):
         "--y_axis",
         type=str,
         required=True,
-        choices=["primal_gap", "wolfe_gap"],
-        help="Y-axis: primal gap or wolfe gap",
+        choices=["primal_gap", "wolfe_gap", "strong_wolfe_gap"],
+        help="Y-axis: primal gap or wolfe gap or strong_wolfe_gap",
     )
     parser.add_argument(
         "--x_axis",

@@ -3,6 +3,7 @@
 
 
 import logging
+import sys
 import time
 
 import numpy as np
@@ -450,7 +451,8 @@ def argmin_quadratic_over_active_set(
         tolerance=tolerance,
     )
     if not barycentric_coordinates.any():
-        raise Exception("projection step is getting stuck")
+        LOGGER.info("Projection step is getting stuck. Terminating..")
+        sys.exit()
     cartesian_coordinates = np.zeros(len(active_set[0]))
     for i in range(len(active_set)):
         cartesian_coordinates += barycentric_coordinates[i] * active_set[i]

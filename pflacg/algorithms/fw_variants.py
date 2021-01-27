@@ -165,11 +165,11 @@ class FrankWolfe(_AbstractAlgorithm):
                     and strong_wolfe_gap_prev is None
                 ):
                     grad = objective_function.evaluate_grad(
-                        x_prev.cartesian_coordinates
+                        point_x_prev.cartesian_coordinates
                     )
                     v = feasible_region.lp_oracle(grad)
-                    point_a, indexMax = feasible_region.away_oracle(grad, x_prev)
-                    dual_gap_prev = grad.dot(x_prev.cartesian_coordinates - v)
+                    point_a, indexMax = feasible_region.away_oracle(grad, point_x_prev)
+                    dual_gap_prev = grad.dot(point_x_prev.cartesian_coordinates - v)
                     strong_wolfe_gap_prev = grad.dot(point_a.cartesian_coordinates - v)
             if self.fw_variant == "lazy":
                 point_x, dual_gap_prev, strong_wolfe_gap_prev = fw_away_lazy(
@@ -183,11 +183,11 @@ class FrankWolfe(_AbstractAlgorithm):
                     strong_wolfe_gap_prev is None or dual_gap_prev is None
                 ):
                     grad = objective_function.evaluate_grad(
-                        x_prev.cartesian_coordinates
+                        point_x_prev.cartesian_coordinates
                     )
                     v = feasible_region.lp_oracle(grad)
-                    point_a, indexMax = feasible_region.away_oracle(grad, x_prev)
-                    dual_gap_prev = grad.dot(x_prev.cartesian_coordinates - v)
+                    point_a, indexMax = feasible_region.away_oracle(grad, point_x_prev)
+                    dual_gap_prev = grad.dot(point_x_prev.cartesian_coordinates - v)
                     strong_wolfe_gap_prev = grad.dot(point_a.cartesian_coordinates - v)
             if self.fw_variant == "DIPFW":
                 point_x, dual_gap_prev, strong_wolfe_gap_prev = dipfw(
@@ -231,7 +231,7 @@ class FrankWolfe(_AbstractAlgorithm):
         if save_and_output_results:
             return run_history
         else:
-            return point_x_prev
+            return point_x_prev, dual_gap_prev, strong_wolfe_gap_prev
 
 
 # Note that the VANILLA FW algorithm only uses the cartesian coordinates

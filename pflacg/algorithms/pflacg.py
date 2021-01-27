@@ -54,8 +54,14 @@ class ParameterFreeLaCG(_AbstractAlgorithm):
         objective_function,
         feasible_region,
         exit_criterion,
-        point_initial,
+        point_initial=None,
     ):
+
+        if point_initial is None:
+            vertex = feasible_region.initial_point.copy()
+            point_initial = Point(vertex, (1.0,), (vertex,))
+        else:
+            point_initial = point_initial
 
         # Initialization
         strong_wolfe_gap_out = compute_strong_wolfe_gap(
@@ -163,7 +169,7 @@ class ParameterFreeLaCG(_AbstractAlgorithm):
 
             LOGGER.info("Running FAFW")
             # Run FAFW and wait for the output
-            point_x_FAFW = self.FAFW.run(
+            point_x_FAFW, _, strong_wolfe_gap_FAFW = self.FAFW.run(
                 objective_function,
                 feasible_region,
                 point_x_FAFW,
@@ -207,9 +213,6 @@ class ParameterFreeLaCG(_AbstractAlgorithm):
             strong_wolfe_gap_ACC_prev = strong_wolfe_gap_ACC
             strong_wolfe_gap_ACC = compute_strong_wolfe_gap(
                 point_x_ACC, objective_function, feasible_region
-            )
-            strong_wolfe_gap_FAFW = compute_strong_wolfe_gap(
-                point_x_FAFW, objective_function, feasible_region
             )
             assert (
                 strong_wolfe_gap_FAFW <= target_accuracy
@@ -513,11 +516,11 @@ class ParameterFreeAGD:
         while not sigma_flag:
 
             # Initialization
+            grad_x = objective_function.evaluate_grad(point_x.cartesian_coordinates)
             point_y = argmin_quadratic_over_active_set(
                 quadratic_coefficient=(eta_0 + sigma) / 2.0,
                 linear_vector=(
-                    objective_function.evaluate_grad(point_x.cartesian_coordinates)
-                    - (eta_0 + sigma) * point_x.cartesian_coordinates
+                    grad_x - (eta_0 + sigma) * point_x.cartesian_coordinates
                 ),
                 active_set=feasible_region.vertices,
                 reference_point=point_x,
@@ -533,11 +536,7 @@ class ParameterFreeAGD:
             )
             point_v = point_y
             point_yh = point_y
-            z = (
-                eta_0 + sigma
-            ) * point_x.cartesian_coordinates - objective_function.evaluate_grad(
-                point_x.cartesian_coordinates
-            )
+            z = (eta_0 + sigma) * point_x.cartesian_coordinates - grad_x
             a = 1.0
             A = 1.0
 
@@ -655,14 +654,14 @@ class ParameterFreeAGD:
 
             eta_x_yh = self._check_eta_condition(
                 objective_function,
-                point_x.cartesian_coordinates,
-                point_yh.cartesian_coordinates,
+                point_x,
+                point_yh,
                 eta,
             )
             eta_yh_y = self._check_eta_condition(
                 objective_function,
-                point_yh.cartesian_coordinates,
-                point_y.cartesian_coordinates,
+                point_yh,
+                point_y,
                 eta,
             )
 
@@ -762,14 +761,14 @@ class ParameterFreeAGD:
             point_y,
         )
 
-    # TODO: change to point_x, point_y
     @staticmethod
-    def _check_eta_condition(objective_function, x, y, eta):
-        """Check if f(y) <= f(x) + <nabla f (x), y - x> + eta / 2 * ||y - x||^2."""
-        f_diff = objective_function.evaluate(y) - objective_function.evaluate(x)
-        grad_x = objective_function.evaluate_grad(x)
-        y_x = y - x
-        return f_diff <= np.dot(grad_x, y_x) + eta / 2 * np.dot(y_x, y_x)
+    def _check_eta_condition(objective_function, point_x, point_y, eta):
+        return (
+            objective_function.evaluate_smoothness_inequality(
+                point_x.cartesian_coordinates, point_y.cartesian_coordinates
+            )
+            <= 0.5 * eta
+        )
 
     @staticmethod
     def _compute_a(A_, theta_max):
@@ -807,7 +806,7 @@ class FractionalAwayStepFW:
 
         fw_algorithm = FrankWolfe(self.fw_variant, "line_search")
         exit_criterion = ExitCriterion("SWG", target_accuracy)
-        point_out = fw_algorithm.run(
+        point_out, dual_gap_out, strong_wolfe_gap_out = fw_algorithm.run(
             objective_function,
             feasible_region,
             exit_criterion,
@@ -815,4 +814,4 @@ class FractionalAwayStepFW:
             save_and_output_results=False,
             global_iter=global_iter,
         )
-        return point_out
+        return point_out, dual_gap_out, strong_wolfe_gap_out

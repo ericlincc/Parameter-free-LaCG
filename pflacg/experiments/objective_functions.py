@@ -5,11 +5,11 @@
 from abc import ABC, abstractmethod
 import logging
 
+
 import numpy as np
-from scipy.sparse import csc_matrix
 from scipy.optimize import minimize_scalar
 from scipy.sparse.linalg import splu
-
+from scipy.sparse import issparse
 
 if __name__ == "__main__":
     logging.basicConfig(
@@ -106,6 +106,38 @@ class _AbstractObjectiveFunction(ABC):
         pass
 
 
+# class Quadratic(_AbstractObjectiveFunction):
+#     """Given matrix M and vector b, f(x) = 0.5 x^T M * x + b^T x."""
+
+#     def __init__(self, dim, M, b):
+#         self._dim = dim
+#         self.M = M
+#         self.b = b
+#         self.L, self.Mu = calculate_max_and_min_eigenvalues(M)
+
+#     @property
+#     def dim(self):
+#         return self._dim
+
+#     def smallest_eigenvalue(self):
+#         return self.Mu
+
+#     def largest_eigenvalue(self):
+#         return self.L
+
+#     def line_search(self, grad, d, x):
+#         return -d.dot(grad) / d.dot(d.dot(self.M).T)
+
+#     def evaluate(self, x):
+#         return 0.5 * x.dot(x.dot(self.M).T) + x.dot(self.b)
+
+#     def evaluate_grad(self, x):
+#         return x.dot(self.M) + self.b
+
+#     def evaluate_smoothness_inequality(self, x, y):
+#         x_diff_norm = (x - y)/np.linalg.norm(x - y)
+#         return 0.5 * np.dot(x_diff_norm, self.M.dot(x_diff_norm))
+
 class Quadratic(_AbstractObjectiveFunction):
     """Given matrix M and vector b, f(x) = 0.5 x^T M * x + b^T x."""
 
@@ -133,11 +165,49 @@ class Quadratic(_AbstractObjectiveFunction):
 
     def evaluate_grad(self, x):
         return self.M.dot(x) + self.b
-
+    
     def evaluate_smoothness_inequality(self, x, y):
         x_diff_norm = (x - y)/np.linalg.norm(x - y)
         return 0.5 * np.dot(x_diff_norm, self.M.dot(x_diff_norm))
 
+class Quadratic_Diagonal(_AbstractObjectiveFunction):
+    def __init__(self, size, xOpt, Mu = 1.0, L = 2.0):
+        self._dim = size
+        self.matdim = int(np.sqrt(size))
+        self.eigenval = np.zeros(size)
+        self.eigenval[0] = Mu
+        self.eigenval[-1] = L
+        self.eigenval[1:-1] = np.random.uniform(Mu, L, size - 2)
+        self.L = L
+        self.Mu = Mu
+        self.xOpt = xOpt
+        self.b = - np.multiply(self.xOpt, self.eigenval)
+        return    
+    
+    @property
+    def dim(self):
+        return self._dim
+    
+    #Evaluate function.
+    def evaluate(self, x):
+        return 0.5*np.dot(x, np.multiply(self.eigenval,x)) + np.dot(self.b, x) 
+    
+    #Evaluate gradient.
+    def evaluate_grad(self, x):
+        return np.multiply(x, self.eigenval) + self.b
+    
+    #Return largest eigenvalue.
+    def largest_eigenvalue(self):
+        return self.L
+
+    #Return smallest eigenvalue.
+    def smallest_eigenvalue(self):
+        return self.Mu
+    
+    #Line Search.
+    def line_search(self, grad, d, x):
+        return -np.dot(grad, d)/np.dot(d, np.multiply(self.eigenval, d))
+    
 class HuberLoss(_AbstractObjectiveFunction):
     """If distance(x - ref) <= radius, then Quadratic, else Linear."""
 

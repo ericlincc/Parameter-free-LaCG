@@ -5,8 +5,8 @@
 import numpy as np
 from gurobipy import GRB
 import networkx as nx
-
-from pflacg.algorithms._algorithms_utils import Point
+from scipy.sparse import issparse
+from pflacg.algorithms._algorithms_utils import Point, Point_sparse
 
 # TODO: add proper docstrings.
 
@@ -36,15 +36,42 @@ def max_vertex(d, vertices):
     Point
     """
 
-    max_prod = d.dot(vertices[0])
+    max_prod = vertices[0].dot(d)
     max_ind = 0
     for i in range(1, len(vertices)):
-        if d.dot(vertices[i]) > max_prod:
-            max_prod = d.dot(vertices[i])
+        if vertices[i].dot(d) > max_prod:
+            max_prod = vertices[i].dot(d)
             max_ind = i
     barycentric = np.zeros(len(vertices))
     barycentric[max_ind] = 1.0
     return Point(vertices[max_ind], barycentric, vertices), max_ind
+    
+    
+def max_vertex_sparse(d, vertices):
+    """
+    Iterate over current active set and return vertex with greatest inner product.
+
+    Parameters
+    ----------
+    d: np.ndarray
+        Direction.
+    vertices: tuple(np.ndarray) or list(np.ndarray)
+        Tuple or list of vertices.
+
+    Returns
+    -------
+    Point
+    """
+
+    max_prod = vertices[0].dot(d)
+    max_ind = 0
+    for i in range(1, len(vertices)):
+        if vertices[i].dot(d) > max_prod:
+            max_prod = vertices[i].dot(d)
+            max_ind = i
+    barycentric = np.zeros(len(vertices))
+    barycentric[max_ind] = 1.0
+    return Point_sparse(vertices[max_ind].toarray().squeeze(), barycentric, vertices), max_ind
 
 
 def generate_random_graph(n, p):

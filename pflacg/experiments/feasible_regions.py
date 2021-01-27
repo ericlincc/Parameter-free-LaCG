@@ -7,8 +7,9 @@ import math
 
 import numpy as np
 from scipy.sparse.linalg import eigsh
+from scipy.sparse import csr_matrix
 
-from pflacg.experiments.experiments_helper import max_vertex
+from pflacg.experiments.experiments_helper import max_vertex, max_vertex_sparse
 
 
 if __name__ == "__main__":
@@ -117,7 +118,6 @@ class BirkhoffPolytope(_AbstractFeasibleRegion):
 
     def lp_oracle(self, d):
         from scipy.optimize import linear_sum_assignment
-
         objective = d.reshape((self.mat_dim, self.mat_dim))
         matching = linear_sum_assignment(objective)
         solution = np.zeros((self.mat_dim, self.mat_dim))
@@ -127,6 +127,64 @@ class BirkhoffPolytope(_AbstractFeasibleRegion):
     def away_oracle(self, grad, point_x):
         return max_vertex(grad, point_x.support)
 
+
+class BirkhoffPolytope_sparse(_AbstractFeasibleRegion):
+    def __init__(self, dim):
+        self.dim = dim
+        self.mat_dim = int(np.sqrt(dim))
+
+    @property
+    def initial_point(self):
+        return csr_matrix(np.identity(self.mat_dim).flatten())
+
+    @property
+    def initial_active_set(self):
+        return [self.initial_point()]
+
+    def lp_oracle(self, d):
+        from scipy.optimize import linear_sum_assignment
+        objective = d.reshape((self.mat_dim, self.mat_dim))
+        matching = linear_sum_assignment(objective)
+        solution = np.zeros((self.mat_dim, self.mat_dim))
+        solution[matching] = 1
+        return csr_matrix(solution.reshape(self.dim))
+
+    def away_oracle(self, grad, point_x):
+        return max_vertex_sparse(grad, point_x.support)
+
+class ProbabilitySimplexPolytope_sparse(_AbstractFeasibleRegion):
+    def __init__(self, dim):
+        self.dim = dim
+
+    @property
+    def initial_point(self):
+        v = np.zeros(self.dim)
+        v[0] = 1.0
+        return csr_matrix(v)
+
+    @property
+    def initial_active_set(self):
+        return [csr_matrix(self.initial_point())]
+
+    def lp_oracle(self, x):
+        v = np.zeros(len(x), dtype=float)
+        v[np.argmin(x)] = 1.0
+        return csr_matrix(v)
+    
+    def away_oracle(self, grad, point_x):
+        return max_vertex_sparse(grad, point_x.support)
+
+    def projection(self, x):
+        (n,) = x.shape  # will raise ValueError if v is not 1-D
+        if x.sum() == 1.0 and np.alltrue(x >= 0):
+            return x
+        v = x - np.max(x)
+        u = np.sort(v)[::-1]
+        cssv = np.cumsum(u)
+        rho = np.count_nonzero(u * np.arange(1, n + 1) > (cssv - 1.0)) - 1
+        theta = float(cssv[rho] - 1.0) / (rho + 1)
+        w = (v - theta).clip(min=0)
+        return w
 
 class ProbabilitySimplexPolytope(_AbstractFeasibleRegion):
     def __init__(self, dim):
@@ -147,14 +205,14 @@ class ProbabilitySimplexPolytope(_AbstractFeasibleRegion):
         v[np.argmin(x)] = 1.0
         return v
 
-    #     #This is a faster implementation of the away oracle without having to loop through active set.
-    #    def away_oracle(self, grad, x):
-    #        aux = np.multiply(grad, np.sign(x))
-    #        indices = np.where(x > 0.0)[0]
-    #        v = np.zeros(len(x), dtype=float)
-    #        index_max = indices[np.argmax(aux[indices])]
-    #        v[index_max] = 1.0
-    #        return v, index_max
+    # #This is a faster implementation of the away oracle without having to loop through active set.
+    # def away_oracle(self, grad, x):
+    #     aux = np.multiply(grad, np.sign(x))
+    #     indices = np.where(x > 0.0)[0]
+    #     v = np.zeros(len(x), dtype=float)
+    #     index_max = indices[np.argmax(aux[indices])]
+    #     v[index_max] = 1.0
+    #     return v, index_max
 
     def away_oracle(self, grad, point_x):
         return max_vertex(grad, point_x.support)
@@ -180,7 +238,7 @@ class L1UnitBallPolytope(_AbstractFeasibleRegion):
     def initial_point(self):
         v = np.zeros(self.dim)
         v[0] = 1.0
-        return v
+        return csc_matrix(v)
 
     @property
     def initial_active_set(self):
@@ -190,7 +248,7 @@ class L1UnitBallPolytope(_AbstractFeasibleRegion):
         v = np.zeros(len(x), dtype=float)
         max_ind = np.argmax(np.abs(x))
         v[max_ind] = -1.0 * np.sign(x[max_ind])
-        return v
+        return csc_matrix(v)
 
     def away_oracle(self, grad, point_x):
         return max_vertex(grad, point_x.support)

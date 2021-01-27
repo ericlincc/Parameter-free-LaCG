@@ -10,7 +10,7 @@ import numpy as np
 from pflacg.algorithms.project_onto_active_set_jit import (
     accelerated_projected_gradient_descent_over_simplex_jit,
 )
-
+from scipy.sparse import issparse
 
 if __name__ == "__main__":
     logging.basicConfig(
@@ -24,8 +24,41 @@ LOGGER = logging.getLogger()
 DISPLAY_DECIMALS = 10
 
 
-# Helper classes
+def rvs(dim=3):
+    """
+    Generates a random orthobasis of dimension dim.
 
+    Parameters
+    ----------
+    dim: int
+
+    Returns
+    -------
+    np.array
+        H
+    """
+    random_state = np.random
+    H = np.eye(dim)
+    D = np.ones((dim,))
+    for n in range(1, dim):
+        x = random_state.normal(size=(dim - n + 1,))
+        D[n - 1] = np.sign(x[0])
+        x[0] -= D[n - 1] * np.sqrt((x * x).sum())
+        # Householder transformation
+        Hx = np.eye(dim - n + 1) - 2.0 * np.outer(x, x) / (x * x).sum()
+        mat = np.eye(dim)
+        mat[n - 1 :, n - 1 :] = Hx
+        H = np.dot(H, mat)
+        # Fix the last sign such that the determinant is 1
+    D[-1] = (-1) ** (1 - (dim % 2)) * D.prod()
+    # Equivalent to np.dot(np.diag(D), H) but faster, apparently
+    H = (D * H.T).T
+    return H
+
+# Helper classes
+def csc_allclose(a, b, rtol=1e-5, atol = 1e-8):
+    c = np.abs(np.abs(a - b) - rtol * np.abs(b))
+    return c.max() <= atol
 
 class Point:
     """Immutable abstraction of a point with respect to its support."""
@@ -135,8 +168,7 @@ class Point:
         boolean, Point
         """
         for i in range(len(self.support)):
-            # if np.array_equal(self.support[i], new_vertex):
-            if np.allclose(self.support[i], new_vertex):
+            if(np.allclose(self.support[i], new_vertex)):
                 barycentric = np.zeros(len(self.support))
                 barycentric[i] = 1.0
                 return True, Point(self.support[i], tuple(barycentric), self.support)
@@ -157,17 +189,17 @@ class Point:
         """
         TODO: add description.
         """
-        max_prod = grad.dot(self.support[0])
-        min_prod = grad.dot(self.support[0])
+        max_prod = self.support[0].dot(grad)
+        min_prod = self.support[0].dot(grad)
         max_ind = 0
         min_ind = 0
         for i in range(len(self.support)):
-            if grad.dot(self.support[i]) > max_prod:
-                max_prod = grad.dot(self.support[i])
+            if self.support[i].dot(grad) > max_prod:
+                max_prod = self.support[i].dot(grad)
                 max_ind = i
             else:
-                if grad.dot(self.support[i]) < min_prod:
-                    min_prod = grad.dot(self.support[i])
+                if self.support[i].dot(grad) < min_prod:
+                    min_prod = self.support[i].dot(grad)
                     min_ind = i
         barycentric_max = np.zeros(len(self.support))
         barycentric_max[max_ind] = 1.0
@@ -180,6 +212,158 @@ class Point:
             min_ind,
         )
 
+
+class Point_sparse:
+    """Immutable abstraction of a point with respect to its support."""
+
+    def __init__(
+        self,
+        cartesian_coordinates,
+        barycentric_coordinates,
+        support,
+    ):
+        """
+        Parameters
+        ----------
+        cartesian_coordinates: numpy.ndarray
+        barycentric_coordinates: tuple(float)
+        support: tuple(numpy.ndarray)
+        """
+
+        if not len(barycentric_coordinates) == len(support):
+            raise ValueError("Lengths of barycentric_coordinates and support not equal")
+        if not isinstance(barycentric_coordinates, tuple):
+            barycentric_coordinates = tuple(barycentric_coordinates)
+        if not isinstance(support, tuple):
+            support = tuple(support)
+
+        self.cartesian_coordinates = cartesian_coordinates
+        self.barycentric_coordinates = barycentric_coordinates
+        self.support = support
+
+    def __add__(self, P):
+        """Overloading addition."""
+
+        # Checking if addition is valid
+        if not isinstance(P, Point_sparse):
+            raise TypeError("Cannot add non-Point object with a Point object")
+        if not len(self.support) == len(P.support):
+            raise ValueError("Cannot add two Points with different support")
+        # for vertex1, vertex2 in zip(self.support, P.support):
+        #     if not id(vertex1) == id(vertex2):
+        #         raise ValueError("Cannot add two Points with different support")
+
+        return Point_sparse(
+            self.cartesian_coordinates + P.cartesian_coordinates,
+            tuple(
+                [
+                    b1 + b2
+                    for b1, b2 in zip(
+                        self.barycentric_coordinates, P.barycentric_coordinates
+                    )
+                ]
+            ),
+            self.support,
+        )
+
+    def __sub__(self, P):
+        """Overloading substraction."""
+
+        # Checking if substraction is valid
+        if not isinstance(P, Point_sparse):
+            raise TypeError("Cannot add non-Point object with a Point object")
+        if not len(self.support) == len(P.support):
+            raise ValueError("Cannot add two Points with different support")
+        # for vertex1, vertex2 in zip(self.support, P.support):
+        #     if not id(vertex1) == id(vertex2):
+        #         raise ValueError("Cannot add two Points with different support")
+
+        return Point_sparse(
+            self.cartesian_coordinates - P.cartesian_coordinates,
+            tuple(
+                [
+                    b1 - b2
+                    for b1, b2 in zip(
+                        self.barycentric_coordinates, P.barycentric_coordinates
+                    )
+                ]
+            ),
+            self.support,
+        )
+
+    def __mul__(self, t):
+        """Overloading multiplication with an int/float."""
+
+        return Point_sparse(
+            self.cartesian_coordinates * t,
+            tuple([i * t for i in self.barycentric_coordinates]),
+            self.support,
+        )
+
+    __rsub__ = __sub__
+    __radd__ = __add__
+    __rmul__ = __mul__
+
+    def is_vertex_in_support(self, new_vertex):
+        """
+        Checks if new_vertex is in the support. If it is, then it returns
+        a representation of new_vertex as a Point using the current support.
+        Otherwise if it is not in the support it returns a representation of
+        new_vertex as a Point using an expanded support (current support plus new_vertex).
+
+        Parameters
+        ----------
+        new_vertex: np.ndarray
+            New vertex to be checked.
+
+        Returns
+        -------
+        boolean, Point
+        """
+        for i in range(len(self.support)):
+            if self.support[i].dot(new_vertex.T)[0,0] > int(np.sqrt(len(self.cartesian_coordinates))) - 0.001:
+                barycentric = np.zeros(len(self.support))
+                barycentric[i] = 1.0
+                return True, Point_sparse(self.support[i].A.squeeze(), tuple(barycentric), self.support)
+        barycentric = np.zeros(len(self.support) + 1)
+        barycentric[-1] = 1.0
+        new_list = list(self.support)
+        new_list.append(new_vertex)
+        return False, Point_sparse(new_vertex.A.squeeze(), tuple(barycentric), tuple(new_list))
+
+    def delete_vertex_in_support(self, index):
+        barycentric = list(self.barycentric_coordinates)
+        support = list(self.support)
+        del barycentric[index]
+        del support[index]
+        return Point_sparse(self.cartesian_coordinates, tuple(barycentric), tuple(support))
+
+    def max_min_vertex(self, grad):
+        """
+        TODO: add description.
+        """
+        max_prod = self.support[0].dot(grad)
+        min_prod = self.support[0].dot(grad)
+        max_ind = 0
+        min_ind = 0
+        for i in range(len(self.support)):
+            if self.support[i].dot(grad) > max_prod:
+                max_prod = self.support[i].dot(grad)
+                max_ind = i
+            else:
+                if self.support[i].dot(grad) < min_prod:
+                    min_prod = self.support[i].dot(grad)
+                    min_ind = i
+        barycentric_max = np.zeros(len(self.support))
+        barycentric_max[max_ind] = 1.0
+        barycentric_min = np.zeros(len(self.support))
+        barycentric_min[min_ind] = 1.0
+        return (
+            Point_sparse(self.support[max_ind], tuple(barycentric_max), self.support),
+            max_ind,
+            Point_sparse(self.support[min_ind], tuple(barycentric_min), self.support),
+            min_ind,
+        )
 
 class ExitCriterion:
     """Stores parameters to determine the exit criterion."""

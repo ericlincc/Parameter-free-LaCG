@@ -150,8 +150,12 @@ class QuadraticSparse(_AbstractObjectiveFunction):
         else:
             raise TypeError("M_sparse should be a csr_matrix.")
         self.b = b
-        self.L = np.real(eigs(self.M_sparse, k=1, which="LR", return_eigenvectors=False)[0])
-        self.Mu = np.real(eigs(self.M_sparse, k=1, which="SR", return_eigenvectors=False)[0])
+        self.L = np.real(
+            eigs(self.M_sparse, k=1, which="LR", return_eigenvectors=False)[0]
+        )
+        self.Mu = np.real(
+            eigs(self.M_sparse, k=1, which="SR", return_eigenvectors=False)[0]
+        )
 
     @property
     def dim(self):
@@ -177,7 +181,6 @@ class QuadraticSparse(_AbstractObjectiveFunction):
     def evaluate_smoothness_inequality(self, x, y):
         x_diff_norm = (x - y) / np.linalg.norm(x - y)
         return 0.5 * np.dot(x_diff_norm, self.M_sparse.dot(x_diff_norm))
-
 
 
 class HuberLoss(_AbstractObjectiveFunction):
@@ -232,6 +235,56 @@ class HuberLoss(_AbstractObjectiveFunction):
         grad_x = self.evaluate_grad(x)
         y_x = y - x
         return (f_diff - np.dot(grad_x, y_x)) / np.dot(y_x, y_x)
+
+
+class QuadraticDiagonal(_AbstractObjectiveFunction):
+    """TODO: Add docstring."""
+
+    def __init__(self, size, x_opt, Mu=1.0, L=2.0):
+        self.len = size
+        self.matdim = int(np.sqrt(size))
+        self.eigenval = np.zeros(size)
+        self.eigenval[0] = Mu
+        self.eigenval[-1] = L
+        self.eigenval[1:-1] = np.random.uniform(Mu, L, size - 2)
+        self.L = L
+        self.Mu = Mu
+        self.x_opt = x_opt
+        self.b = -np.multiply(self.x_opt, self.eigenval)
+        self.inv_hess = None
+
+    @property
+    def dim(self):
+        return self.len
+
+    @property
+    def largest_eigenvalue(self):
+        return self.L
+
+    @property
+    def smallest_eigenvalue(self):
+        return self.Mu
+
+    def line_search(self, grad, d):
+        return -np.dot(grad, d) / np.dot(d, np.multiply(self.eigenval, d))
+
+    def evaluate(self, x):
+        return 0.5 * np.dot(x, np.multiply(self.eigenval, x)) + np.dot(self.b, x)
+
+    def evaluate_grad(self, x):
+        return np.multiply(x, self.eigenval) + self.b
+        # Evaluate the inverse of the Hessian
+
+    def evaluate_inv_hess(self):
+        if self.inv_hess is None:
+            self.inv_hess = np.diag(np.reciprocal(self.eigenval))
+        return self.inv_hess
+
+    def return_M(self):
+        return np.diag(self.eigenval)
+
+    def return_b(self):
+        return self.b
 
 
 class RegularizedObjectiveFunction(_AbstractObjectiveFunction):

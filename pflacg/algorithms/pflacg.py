@@ -28,7 +28,7 @@ LOGGER = logging.getLogger()
 
 
 WAIT_TIME_FOR_LOCK = 0.2
-MAX_NUM_WAIT_INTERVALS = 3000
+MAX_NUM_WAIT_INTERVALS = int(120 / WAIT_TIME_FOR_LOCK)
 
 
 # Algorithms
@@ -192,7 +192,7 @@ class ParameterFreeLaCG(_AbstractAlgorithm):
                     LOGGER.info("Waiting for ACC")
                     time.sleep(WAIT_TIME_FOR_LOCK)
                     num_wait_interval += 1
-                    if (num_wait_interval > MAX_NUM_WAIT_INTERVALS):
+                    if num_wait_interval > MAX_NUM_WAIT_INTERVALS:
                         LOGGER.info("ACC timed out. Continuing with PFLaCG.")
                         break
 

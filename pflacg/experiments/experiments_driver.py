@@ -69,6 +69,10 @@ def run_algorithms(args):
     # Save timestamp for later identification
     timestamp = get_current_timestamp()
 
+    # Create directory if not already exists
+    if not path.isdir(args.save_location):
+        mkdir(args.save_location)
+
     # Reconfigure logging to save to file
     if args.save_logging:
         logging_filename = path.join(args.save_location, f"run_log-{timestamp}")
@@ -180,10 +184,6 @@ def run_algorithms(args):
         _algorithm = _algorithm_class(**algorithm_config["args"])
         list_algorithms.append((algorithm_config["name"], _algorithm))
     # TODO: implement load algorithms from pickled if needed. Otherwise remove pickling algos.
-
-    # Create directory if not already exists
-    if not path.isdir(args.save_location):
-        mkdir(args.save_location)
 
     # Save all objects if save_objects is true
     if args.save_objects:

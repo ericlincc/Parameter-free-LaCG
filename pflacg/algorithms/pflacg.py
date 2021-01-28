@@ -192,9 +192,9 @@ class ParameterFreeLaCG(_AbstractAlgorithm):
                     LOGGER.info("Waiting for ACC")
                     time.sleep(WAIT_TIME_FOR_LOCK)
                     num_wait_interval += 1
-                    assert (
-                        num_wait_interval <= MAX_NUM_WAIT_INTERVALS
-                    )  # TODO: Remove after debugging
+                    if (num_wait_interval > MAX_NUM_WAIT_INTERVALS):
+                        LOGGER.info("ACC timed out. Continuing with PFLaCG.")
+                        break
 
             LOGGER.info("Acquiring buffer")
             # retrieve the most recent output

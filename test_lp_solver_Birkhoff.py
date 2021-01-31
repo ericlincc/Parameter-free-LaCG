@@ -20,6 +20,8 @@ from scipy.sparse import identity
 from scipy.sparse.linalg import eigsh
 
 
+dimension = 400
+
 lp_solver_scipy = ConstrainedBirkhoffPolytope(
     dimension,
     scipy_solver="revised simplex",

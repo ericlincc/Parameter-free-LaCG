@@ -12,7 +12,7 @@ from pflacg.experiments.objective_functions import RegularizedObjectiveFunction
 from pflacg.algorithms._abstract_algorithm import _AbstractAlgorithm
 from pflacg.algorithms._algorithms_utils import *  # TODO: Import only the methods and classes we need
 from pflacg.experiments.feasible_regions import ConvexHull, ProbabilitySimplexPolytope
-from pflacg.algorithms.fw_variants import FrankWolfe_simplex
+from pflacg.algorithms.fw_variants_simplex import FrankWolfeSimplex
 
 
 logging.basicConfig(
@@ -791,7 +791,7 @@ class FractionalAwayStepFWSimplex:
             strong_wolfe_gap = np.dot(grad, a - v)
             target_accuracy = strong_wolfe_gap * self.ratio
 
-        fw_algorithm = FrankWolfe_simplex(self.fw_variant, "line_search")
+        fw_algorithm = FrankWolfeSimplex(self.fw_variant, "line_search")
         exit_criterion = ExitCriterion("SWG", target_accuracy)
         point_out, dual_gap, strong_wolfe_gap = fw_algorithm.run(
             objective_function,

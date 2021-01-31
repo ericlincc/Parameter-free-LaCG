@@ -25,7 +25,7 @@ for dim in DIMENSIONS:
             path.join(
                 PATH_TO_PICKLE_BASE,
                 "feasible_regions",
-                f"{type(feasible_region).__name__}-dim_{dim}_seed_{seed}.pickle",
+                f"{type(feasible_region).__name__}-modifiedRHS-dim_{dim}_seed_{seed}.pickle",
             ),
             "wb",
         ) as f:

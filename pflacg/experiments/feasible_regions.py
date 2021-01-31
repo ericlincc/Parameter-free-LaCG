@@ -141,12 +141,17 @@ class ConstrainedBirkhoffPolytope(_AbstractFeasibleRegion):
     def __init__(
         self,
         dim,
-        linear_equality_vector,
+        const_vector_ineq=None,
+        const_matrix_ineq=None,
+        const_matrix_eq=None,
+        const_vector_eq=None,
+        linear_equality_vector  = None,
         scipy_solver="revised simplex",
     ):
         self.dim = dim
         self.matdim = int(np.sqrt(dim))
         self.scipy_solver = scipy_solver
+        
         self.A = np.zeros((2*self.matdim - 1, self.dim))
         #Condition on the columns
         for j in range(self.matdim):
@@ -156,8 +161,34 @@ class ConstrainedBirkhoffPolytope(_AbstractFeasibleRegion):
         for j in range(self.matdim - 1):
             for i in range(self.matdim):
                 self.A[self.matdim + j,int(j*self.matdim) + i] = 1.0
+        if(linear_equality_vector is not None):
+            self.b = linear_equality_vector
+        else:
+            self.b = np.ones(2*self.matdim - 1)
+        
+        if const_matrix_ineq is not None and const_vector_ineq is not None:
+            num_ineq_constraints, dim_ineq_constraints = const_matrix_ineq.shape
+            assert (
+                dim_ineq_constraints == self.dim
+            ), "Dimension of the inequality constraints does not match the dimensionality of the problem."
+            self.G = const_matrix_ineq
+            self.h = const_vector_ineq
+        else:
+            self.G = None
+            self.h = None
 
-        self.b = linear_equality_vector
+        if const_matrix_eq is not None and const_vector_eq is not None:
+            num_eq_constraints, dim_eq_constraints = const_matrix_eq.shape
+            assert (
+                dim_eq_constraints == self.dim
+            ), "Dimension of the equality constraints does not match the dimensionality of the problem."
+            self.A = np.vstack(
+                (
+                    self.A,
+                    const_matrix_eq,
+                )
+            )
+            self.b = np.append(self.b, const_vector_eq).tolist()
             
     @property
     def initial_point(self):
@@ -171,10 +202,12 @@ class ConstrainedBirkhoffPolytope(_AbstractFeasibleRegion):
     def lp_oracle(self, x):
         res = linprog(
             x,
+            A_ub=self.G,
+            b_ub=self.h,
             A_eq=self.A,
             b_eq=self.b,
             method=self.scipy_solver,
-            bounds=(0, np.inf),
+            bounds=(0.0, np.inf),
         )
         assert res.status == 0, "LP oracle did not return succesfully."
         optimum = np.array(res.x)

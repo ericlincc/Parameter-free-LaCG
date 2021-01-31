@@ -137,6 +137,50 @@ class BirkhoffPolytope(_AbstractFeasibleRegion):
     def away_oracle(self, grad, point_x):
         return max_vertex(grad, point_x.support)
 
+class ConstrainedBirkhoffPolytope(_AbstractFeasibleRegion):
+    def __init__(
+        self,
+        dim,
+        scipy_solver="revised simplex",
+    ):
+        self.dim = dim
+        self.matdim = int(np.sqrt(dim))
+        self.scipy_solver = scipy_solver
+        self.A = np.zeros((2*self.matdim - 1, self.dim))
+        #Condition on the columns
+        for j in range(self.matdim):
+            for i in range(self.matdim):
+                self.A[j,int(i*self.matdim) + j] = 1.0
+        #Condition on the rows
+        for j in range(self.matdim - 1):
+            for i in range(self.matdim):
+                self.A[self.matdim + j,int(j*self.matdim) + i] = 1.0
+
+        self.b = np.ones(int(2*self.matdim) - 1)
+            
+    @property
+    def initial_point(self):
+        c = np.ones(self.dim)
+        return self.lp_oracle(c)
+
+    @property
+    def initial_active_set(self):
+        return [self.initial_point()]
+
+    def lp_oracle(self, x):
+        res = linprog(
+            x,
+            A_eq=self.A,
+            b_eq=self.b,
+            method=self.scipy_solver,
+            bounds=(0, np.inf),
+        )
+        assert res.status == 0, "LP oracle did not return succesfully."
+        optimum = np.array(res.x)
+        return optimum.flatten()
+
+    def away_oracle(self, grad, point_x):
+        return max_vertex(grad, point_x.support)
 
 class ProbabilitySimplexPolytope(_AbstractFeasibleRegion):
     def __init__(self, dim):

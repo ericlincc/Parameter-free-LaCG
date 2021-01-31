@@ -141,6 +141,7 @@ class ConstrainedBirkhoffPolytope(_AbstractFeasibleRegion):
     def __init__(
         self,
         dim,
+        linear_equality_vector,
         scipy_solver="revised simplex",
     ):
         self.dim = dim
@@ -156,7 +157,7 @@ class ConstrainedBirkhoffPolytope(_AbstractFeasibleRegion):
             for i in range(self.matdim):
                 self.A[self.matdim + j,int(j*self.matdim) + i] = 1.0
 
-        self.b = np.ones(int(2*self.matdim) - 1)
+        self.b = linear_equality_vector
             
     @property
     def initial_point(self):

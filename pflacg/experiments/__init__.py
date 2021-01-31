@@ -3,12 +3,12 @@ from pflacg.experiments.feasible_regions import (
     ProbabilitySimplexPolytope,
     L1UnitBallPolytope,
     L2UnitBallPolytope,
-    spectrahedron,
-    flow_polytope,
+    Spectrahedron,
+    FlowPolytope,
 )
 from pflacg.experiments.objective_functions import (
     Quadratic,
     HuberLoss,
-    graphical_lasso,
-    logistic_regression,
+    GraphicalLasso,
+    LogisticRegression,
 )

@@ -1,9 +1,5 @@
-# -*- coding: utf-8 -*-
-"""
-Created on Tue Jan  5 09:55:07 2021
-
-@author: pccom
-"""
+# coding=utf-8
+"""Separate module for speedup using numba just-in-time compilation."""
 
 
 from numba import jit
@@ -21,6 +17,36 @@ def accelerated_projected_gradient_descent_over_simplex_jit(
     tolerance_type,
     tolerance,
 ):
+    """
+    TODO: Add a description of the algorithm and its reference.
+
+    Parameters
+    ----------
+    quadratic: np.ndarray
+        The matrix of the quadratic form.
+    linear: np.ndarray
+        The linear vector of the quadratic form.
+    constant: float
+        The constant term of the quadratic form.
+    active_set: np.ndarray
+        The stacked array of the active vertices.
+    initial_x: np.ndarray
+        The initial barycentric coordinates w.r.t. to the active set.
+    reference_x: np.ndarray
+        Reference point for computing the gradient mapping if
+        tolerance_type="gradient mapping".
+    tolerance_type: string
+        Either "dual gap" or "gradient mapping".
+    tolerance: float
+        The accuracy to which we need to solve this subproblem to.
+
+    Returns
+    -------
+    np.ndarray
+        The barycentric coordinates w.r.t. to the active set. Zeros if it is detected
+        that no more progress can be made.
+    """
+
     def f_evaluate(x, quadratic, linear, constant):
         """f (x) = 0.5 x^T Q x + b^T x + c"""
         return 0.5 * x.T.dot(quadratic.dot(x)) + linear.dot(x) + constant
@@ -42,7 +68,7 @@ def accelerated_projected_gradient_descent_over_simplex_jit(
             return True
 
     def simplex_projection(x):
-        (n,) = x.shape  # will raise ValueError if v is not 1-D
+        n = x.shape[0]
         if x.sum() == 1.0 and np.all(x >= 0.0):
             return x
         v = x - np.max(x)
@@ -74,9 +100,10 @@ def accelerated_projected_gradient_descent_over_simplex_jit(
     wolfe_gap = grad.dot(x - simplex_lp_oracle(grad))
 
     num_elem_moving_average = 20
-    moving_average = np.zeros(num_elem_moving_average)
-    moving_average[0] = wolfe_gap
-    num_total_elements = 1
+    iteration = 0
+    previous_wolfe_gaps = np.zeros(num_elem_moving_average)
+    previous_wolfe_gaps[0] = wolfe_gap
+    moving_average = wolfe_gap
 
     while not has_met_stopping_criterion(
         x, wolfe_gap, active_set, reference_x, tolerance_type, tolerance
@@ -100,18 +127,17 @@ def accelerated_projected_gradient_descent_over_simplex_jit(
         grad = f_evaluate_grad(x, quadratic, linear, constant)
         _wolfe_gap = wolfe_gap
         wolfe_gap = grad.dot(x - simplex_lp_oracle(grad))
-        
-        if(num_total_elements < num_elem_moving_average):
-            num_total_elements += 1
-        for i in range(0, num_total_elements - 1):
-            moving_average[num_total_elements - 1 - i] = moving_average[num_total_elements - 2 - i]
-        moving_average[0] = wolfe_gap
-        
-        old_wolfe_gap = np.mean(moving_average[0:int(num_total_elements/2.0)])
-        new_wolfe_gap = np.mean(moving_average[int(num_total_elements/2.0):num_total_elements])
-        
-        # Detecting if subproblem is stuck
-        # TODO: Use moving average instead
-        if abs(old_wolfe_gap - new_wolfe_gap) <= 1e-12 and wolfe_gap < 1e-11:
+
+        iteration += 1
+        moving_average_ = moving_average
+        if iteration < num_elem_moving_average:
+            previous_wolfe_gaps[iteration] = wolfe_gap
+            moving_average = np.sum(previous_wolfe_gaps) / iteration
+        else:
+            previous_wolfe_gaps[iteration % num_elem_moving_average] = wolfe_gap
+            moving_average = np.mean(previous_wolfe_gaps)
+
+        # Detecting if subproblem progress is stuck due to numpy computation inaccuracies.
+        if abs(moving_average - moving_average_) <= 1e-15 and moving_average < 1e-11:
             return np.zeros(len(initial_x))
     return x

@@ -4,25 +4,26 @@
 from copy import deepcopy
 import logging
 import time
+
 import numpy as np
 
 from pflacg.algorithms._abstract_algorithm import _AbstractAlgorithm
-
 from pflacg.algorithms._algorithms_utils import (
     Point,
     step_size,
     DISPLAY_DECIMALS,
-    new_vertex_fail_fast,
-    delete_vertex_index,
     calculate_stepsize,
 )
 
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(levelname)s :: %(asctime)s :: %(message)s",
-    datefmt="%Y-%m-%d %H:%M:%S",
-)
+
+if __name__ == "__main__":
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(levelname)s :: %(asctime)s :: %(message)s",
+        datefmt="%Y-%m-%d %H:%M:%S",
+    )
 LOGGER = logging.getLogger()
+
 
 class FrankWolfe_simplex(_AbstractAlgorithm):
     """
@@ -70,8 +71,7 @@ class FrankWolfe_simplex(_AbstractAlgorithm):
         self.fw_variant = fw_variant
         self.sampling_frequency = sampling_frequency
         assert (
-            fw_variant == "AFW"
-            or fw_variant == "PFW"
+            fw_variant == "AFW" or fw_variant == "PFW"
         ), "Wrong variant supplied to the adaptive algorithm"
         assert (
             step_type == "line_search" or step_type == "adaptive_short_step"
@@ -181,13 +181,14 @@ class FrankWolfe_simplex(_AbstractAlgorithm):
         else:
             return x_prev, dual_gap_prev, strong_wolfe_gap_prev
 
+
 def away_step_fw_simplex(objective_function, feasible_region, x, step_size_param):
     grad = objective_function.evaluate_grad(x)
     v = feasible_region.lp_oracle(grad)
     a, index_max = feasible_region.away_oracle_fast(grad, x)
     wolfe_gap = grad.dot(x - v)
     strong_wolfe_gap = grad.dot(a - v)
-    if (2.0*wolfe_gap >strong_wolfe_gap):
+    if 2.0 * wolfe_gap > strong_wolfe_gap:
         d = v - x
         alpha_max = 1.0
         alpha = step_size(
@@ -200,9 +201,7 @@ def away_step_fw_simplex(objective_function, feasible_region, x, step_size_param
         )
     else:
         d = x - a
-        alpha_max = x[index_max] / (
-            1.0 - x[index_max]
-        )
+        alpha_max = x[index_max] / (1.0 - x[index_max])
         alpha = step_size(
             objective_function,
             x,
@@ -230,7 +229,8 @@ def pairwise_step_fw_simplex(objective_function, feasible_region, x, step_size_p
         alpha_max,
         step_size_param,
     )
-    return x + alpha*(v - a), wolfe_gap, strong_wolfe_gap
+    return x + alpha * (v - a), wolfe_gap, strong_wolfe_gap
+
 
 class FrankWolfe(_AbstractAlgorithm):
     """
@@ -329,7 +329,6 @@ class FrankWolfe(_AbstractAlgorithm):
 
         if self.fw_variant == "lazy" or self.fw_variant == "lazy quick exit":
             phi_val = [dual_gap]
-
 
         run_status = (iteration, duration, f_val, dual_gap, strong_wolfe_gap)
         print(run_status)
@@ -437,7 +436,7 @@ class FrankWolfe(_AbstractAlgorithm):
         if save_and_output_results:
             return run_history
         else:
-            return point_x_prev
+            return point_x_prev, dual_gap_prev, strong_wolfe_gap_prev
 
 
 # Note that the VANILLA FW algorithm only uses the cartesian coordinates
@@ -566,7 +565,7 @@ def dipfw(objective_function, feasible_region, point_x, step_size_param):
     grad = objective_function.evaluate_grad(point_x.cartesian_coordinates)
     v = feasible_region.lp_oracle(grad)
     wolfe_gap = grad.dot(point_x.cartesian_coordinates - v)
-    
+
     grad_aux = grad.copy()
     for i in range(len(grad_aux)):
         if point_x.cartesian_coordinates[i] == 0.0:

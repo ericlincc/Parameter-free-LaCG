@@ -265,7 +265,7 @@ class QuadraticDiagonal(_AbstractObjectiveFunction):
     def smallest_eigenvalue(self):
         return self.Mu
 
-    def line_search(self, grad, d):
+    def line_search(self, grad, d, x):
         return -np.dot(grad, d) / np.dot(d, np.multiply(self.eigenval, d))
 
     def evaluate(self, x):
@@ -278,7 +278,6 @@ class QuadraticDiagonal(_AbstractObjectiveFunction):
     def evaluate_smoothness_inequality(self, x, y):
         x_diff_norm = (x - y) / np.linalg.norm(x - y)
         return 0.5 * np.dot(x_diff_norm, np.multiply(self.eigenval, x_diff_norm))
-
 
 class RegularizedObjectiveFunction(_AbstractObjectiveFunction):
     """Regularize an objective function with a quadratic function.

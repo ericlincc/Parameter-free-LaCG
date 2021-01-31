@@ -275,16 +275,9 @@ class QuadraticDiagonal(_AbstractObjectiveFunction):
         return np.multiply(x, self.eigenval) + self.b
         # Evaluate the inverse of the Hessian
 
-    def evaluate_inv_hess(self):
-        if self.inv_hess is None:
-            self.inv_hess = np.diag(np.reciprocal(self.eigenval))
-        return self.inv_hess
-
-    def return_M(self):
-        return np.diag(self.eigenval)
-
-    def return_b(self):
-        return self.b
+    def evaluate_smoothness_inequality(self, x, y):
+        x_diff_norm = (x - y) / np.linalg.norm(x - y)
+        return 0.5 * np.dot(x_diff_norm, np.multiply(self.eigenval, x_diff_norm))
 
 
 class RegularizedObjectiveFunction(_AbstractObjectiveFunction):

@@ -25,7 +25,7 @@ for dim in DIMENSIONS:
                 vect = vect / np.linalg.norm(vect)
                 set_of_vertices.append(vect)
 
-            convex_hull = ConvexHull(
+            feasible_region = ConvexHull(
                 set_of_vertices,
             )
 
@@ -37,5 +37,5 @@ for dim in DIMENSIONS:
                 ),
                 "wb",
             ) as f:
-                pickle.dump(convex_hull, f)
+                pickle.dump(feasible_region, f)
                 print("Pickle object dumped.")

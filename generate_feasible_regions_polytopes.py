@@ -26,11 +26,11 @@ for dim in DIMENSIONS:
                 vect = 2.0 * (np.random.rand(dim) - 0.5)
                 vect = vect / np.linalg.norm(vect)
                 inequality_matrix[i, :] = vect
-                inequality_vector[i] = np.sqrt(1 / dimension)
+                inequality_vector[i] = np.sqrt(1 / dim)
 
-            lp_solver_scipy = ConstrainedL1BallPolytope(
+            feasible_region = ConstrainedL1BallPolytope(
                 l1_regularization,
-                dimension,
+                dim,
                 const_matrix_ineq=inequality_matrix,
                 const_vector_ineq=inequality_vector,
                 solver_type="scipy",
@@ -45,5 +45,5 @@ for dim in DIMENSIONS:
                 ),
                 "wb",
             ) as f:
-                pickle.dump(lp_solver_scipy, f)
+                pickle.dump(feasible_region, f)
                 print("Pickle object dumped.")

@@ -3,21 +3,9 @@
 
 
 import numpy as np
-from gurobipy import GRB
 import networkx as nx
 
 from pflacg.algorithms._algorithms_utils import Point
-
-# TODO: add proper docstrings.
-
-
-def fake_callback(model, where, value):
-    """Callback function used to interface with Gurobi."""
-    gg_eps = 1e-08
-    if where == GRB.Callback.MIP:
-        obj_bnd = model.cbGet(GRB.Callback.MIP_OBJBND)
-        if obj_bnd >= value + gg_eps:
-            pass
 
 
 def max_vertex(d, vertices):

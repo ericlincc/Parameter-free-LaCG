@@ -148,6 +148,3 @@ dependencies:
   - zipp=3.4.0=pyhd3eb1b0_0
   - zlib=1.2.11=h7b6447c_3
   - zstd=1.4.4=h0b5b093_3
-  - pip:
-    - gurobipy==9.1.1
-prefix: /home/eric/anaconda3/envs/pflacg

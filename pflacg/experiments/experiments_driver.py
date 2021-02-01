@@ -177,6 +177,10 @@ def run_algorithms(args):
     # Parse config
     with open(args.algorithms_config, "r") as f:
         algorithms_config = json.load(f)
+    LOGGER.info("Algorithm configs in this run:")
+    for algo_config in algorithms_config:
+        LOGGER.info(f"- {json.dumps(algo_config)}")
+
     # Instantiate algorithms
     list_algorithms = []
     for algorithm_config in algorithms_config:

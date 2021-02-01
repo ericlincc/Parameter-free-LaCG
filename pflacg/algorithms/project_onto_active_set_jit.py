@@ -138,7 +138,7 @@ def accelerated_projected_gradient_descent_over_simplex_jit(
             moving_average = np.mean(previous_wolfe_gaps)
 
         # Detecting if subproblem progress is stuck due to numpy computation inaccuracies.
-        if (abs(moving_average - moving_average_) <= 1e-15 and moving_average < 1e-11) or iteration > 100:
+        if (abs(moving_average - moving_average_) <= 1e-5 and moving_average < 1e-5):
             # return np.zeros(len(initial_x))
             return x
     return x

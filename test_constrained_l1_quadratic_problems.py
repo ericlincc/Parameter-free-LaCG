@@ -1,8 +1,15 @@
+from os import environ
+environ["MKL_NUM_THREADS"] = "1"
+environ["NUMEXPR_NUM_THREADS"] = "1"
+environ["OMP_NUM_THREADS"] = "1"
+
 from pflacg.experiments.feasible_regions import *
 from pflacg.experiments.objective_functions import *
 from pflacg.algorithms.fw_variants import *
 from pflacg.algorithms.pflacg import *
 from pflacg.algorithms._algorithms_utils import ExitCriterion
+
+import random
 import numpy as np
 
 logging.basicConfig(
@@ -12,49 +19,59 @@ logging.basicConfig(
 )
 
 PATH_TO_PICKLE_BASE = "/scratch/share/pflacg_experiments/pickled_objects"
-dim = 400
+dim = 100
 l1_regularization = 1.0
 
-# constraints = 50
-# inequality_matrix = np.zeros((constraints, dim))
-# inequality_vector = np.zeros((constraints))
-# for i in range(constraints):
-#     vect = 2.0 * (np.random.rand(dim) - 0.5)
-#     vect = vect / np.linalg.norm(vect)
-#     inequality_matrix[i, :] = vect
-#     inequality_vector[i] = np.sqrt(1 / dim)
+constraints = 25
+equality_matrix = np.zeros((constraints, dim))
+equality_vector = np.zeros((constraints))
+entries = random.sample(range(dim), 2*constraints)
+entries_left = entries[:int(len(entries)/2)]
+entries_right = entries[int(len(entries)/2):]
+print(equality_matrix.shape, equality_vector.shape)
+for i in range(constraints):
+    equality_matrix[i, entries_left[i]] = 1.0
+    equality_matrix[i, entries_right[i]] = -1.0
+    equality_vector[i] = 0.0
 
 feasible_region = ConstrainedL1BallPolytope(
     l1_regularization,
     dim,
-    # const_matrix_ineq=inequality_matrix,
-    # const_vector_ineq=inequality_vector,
+    const_matrix_eq=equality_matrix,
+    const_vector_eq=equality_vector,
     solver_type="scipy",
     sparse_solver=False,
 )
 
-
 mat = np.random.rand(dim, dim)
 mat = mat.dot(mat.T) + np.identity(dim)
-num_nonzero_elem = 20
 
-import random
-entries = random.sample(range(dim), num_nonzero_elem)
-optimum = np.zeros(dim)
-optimum[entries] = 0.1*(np.random.rand(num_nonzero_elem) - 0.5)
-
-assert np.sum(np.abs(optimum)) <= 1.0, "Global optimum is not contained in the interior."
-
-print(np.sum(np.abs(optimum)))
-
+optimum = 10.0*np.random.rand(dim)
 fun = Quadratic(dim, mat, optimum)
 
-
-exit_criterion = ExitCriterion("SWG", 0.001)
+accuracy = 0.00000001
+exit_criterion = ExitCriterion("SWG", accuracy, max_time=1000)
 AFW_algorithm = FrankWolfe("AFW", "line_search") 
-AFW_results = AFW_algorithm.run(fun, feasible_region, exit_criterion)
+AFW_results, output_point = AFW_algorithm.run(fun, feasible_region, exit_criterion)
 
-PFLaCG_algorithm = ParameterFreeLaCG("AFW") 
+#AGD_alg = ParameterFreeAGD()
+#feasible_region_convex_hull = ConvexHull(list(output_point.support))
+#barycentric_coordinates = np.zeros(len(output_point.support))
+#barycentric_coordinates[0] = 1.0
+#print()
+#point_x = Point(output_point.support[0], tuple(barycentric_coordinates), output_point.support)
+#gradient_output = fun.evaluate_grad(point_x.cartesian_coordinates)
+#v = feasible_region.lp_oracle(gradient_output)
+#a, index_max = feasible_region.away_oracle(gradient_output, point_x)
+#print("SWG gap before: ", gradient_output.dot(a.cartesian_coordinates - v))
+#point_x, eta, sigma, iteration = AGD_alg.run(fun, feasible_region_convex_hull, point_x, epsilon = accuracy)
+#gradient_output = fun.evaluate_grad(point_x.cartesian_coordinates)
+#v = feasible_region.lp_oracle(gradient_output)
+#a, index_max = feasible_region.away_oracle(gradient_output, point_x)
+#print("SWG gap: ", gradient_output.dot(a.cartesian_coordinates - v))
+#quit()
+
+PFLaCG_algorithm = ParameterFreeLaCG("AFW", iter_sync=False) 
 PFLaCG_results = PFLaCG_algorithm.run(fun, feasible_region, exit_criterion)
 
 colors = ["k", "c", "b", "m", "r", "g"]
@@ -119,6 +136,6 @@ plt.semilogy(
 plt.xlabel("Iteration")
 plt.ylabel("Strong Wolfe Gap")
 plt.legend()
-plt.savefig("L1_ball_comparison.pdf")
+plt.savefig("L1_ball_comparison7.pdf")
 # plt.show()
 plt.close()

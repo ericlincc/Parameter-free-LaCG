@@ -193,6 +193,7 @@ class FrankWolfe(_AbstractAlgorithm):
                 point_x, dual_gap_prev, strong_wolfe_gap_prev = dipfw(
                     objective_function, feasible_region, point_x, self.step_size_param
                 )
+            print("Size of active set: ", len(point_x.support))
             iteration += 1
             duration = time.time() - start_time
             f_val = objective_function.evaluate(point_x.cartesian_coordinates)
@@ -228,8 +229,9 @@ class FrankWolfe(_AbstractAlgorithm):
                         )
                     )
                 run_history.append(run_status)
+        print("Size of the active set", len(point_x_prev.support))  
         if save_and_output_results:
-            return run_history
+            return run_history, point_x_prev
         else:
             return point_x_prev, dual_gap_prev, strong_wolfe_gap_prev
 

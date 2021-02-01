@@ -47,7 +47,7 @@ class ParameterFreeLaCG(_AbstractAlgorithm):
         self.ratio = 0.5
         self.iter_sync = iter_sync
         self.FAFW = FractionalAwayStepFW(fw_variant=self.fw_variant, ratio=self.ratio)
-        self.ACC = ACC = ParameterFreeAGD()
+        self.ACC = ACC = ParameterFreeAGD(iter_sync = self.iter_sync)
 
     def run(
         self,
@@ -160,6 +160,7 @@ class ParameterFreeLaCG(_AbstractAlgorithm):
                         sigma,
                         shared_buffers_dict,
                         iteration,
+                        exit_criterion.criterion_value,
                     ),
                 )
                 if len(active_set_ACC) > 1:
@@ -214,6 +215,7 @@ class ParameterFreeLaCG(_AbstractAlgorithm):
             strong_wolfe_gap_ACC = compute_strong_wolfe_gap(
                 point_x_ACC, objective_function, feasible_region
             )
+            LOGGER.info(f"Strong Wolfe gap outside = {strong_wolfe_gap_ACC}")
             assert (
                 strong_wolfe_gap_FAFW <= target_accuracy
             )  # TODO: remove this after debugging.
@@ -289,8 +291,9 @@ class ParameterFreeLaCG(_AbstractAlgorithm):
 
 
 class ParameterFreeAGD:
-    def __init__(self, estimate_ratio=2):
+    def __init__(self, iter_sync, estimate_ratio=2):
         self.estimate_ratio = estimate_ratio
+        self.iter_sync = iter_sync
 
     def run(
         self,
@@ -303,6 +306,7 @@ class ParameterFreeAGD:
         shared_buffers_dict=None,
         last_restart_iter=0,
         epsilon_f=1e-12,
+
     ):
         """Run PF-ACC given an initial point and an active set/feasible region.
 
@@ -388,8 +392,11 @@ class ParameterFreeAGD:
 
         # Early return if primal gap is small
         wolfe_gap = compute_wolfe_gap(point_x, objective_function, feasible_region)
+        #wolfe_gap = compute_strong_wolfe_gap(point_x, objective_function, feasible_region)
+        #print("SWG over the active set: ", wolfe_gap)
         if wolfe_gap <= epsilon_f:
-            LOGGER.info("Early halting ACC with wolfe_gap <= epsilon_f")
+            #LOGGER.info(f"wolfe_gap = {wolfe_gap}, epsilon_f = {epsilon_f}")
+            #LOGGER.info("Early halting ACC with strong wolfe_gap <= outer target accuracy")
             if shared_buffers_dict:
                 buffer_lock.acquire()
                 global_eta.value = eta
@@ -428,7 +435,8 @@ class ParameterFreeAGD:
                 epsilon_f=epsilon_f,
             )
             iteration += _iteration
-
+            #wolfe_gap = compute_strong_wolfe_gap(point_x, objective_function, feasible_region)
+            #LOGGER.info(f"FW gap over the active set inside = {wolfe_gap}")
             LOGGER.info("ACC about to update buffer.")
             if shared_buffers_dict:
                 buffer_lock.acquire()
@@ -443,7 +451,7 @@ class ParameterFreeAGD:
                 else:
                     _global_iter = np.infty
 
-                if _global_iter >= last_restart_iter + iteration:
+                if _global_iter >= last_restart_iter + iteration or not self.iter_sync:
                     # Update shared buffers
                     buffer_lock.acquire()
                     ret_x_cartesian_coordinates[:] = point_x.cartesian_coordinates[:]
@@ -451,17 +459,21 @@ class ParameterFreeAGD:
                         :
                     ]
                     buffer_lock.release()
+                    LOGGER.info("ACC finished updating buffer.")
 
                     # Continue with the next ACC
                     with ACC_paused_flag.get_lock():
                         ACC_paused_flag.value = 0
                     break
                 else:
+                    LOGGER.info(f"Global iter bigger than ACC iter. Buffer not updated yet. ACC iter = {last_restart_iter + iteration}")
                     # Pausing ACC's execution and sleep for some time.
                     with ACC_paused_flag.get_lock():
                         ACC_paused_flag.value = 1
                     time.sleep(WAIT_TIME_FOR_LOCK)
 
+        #wolfe_gap = compute_strong_wolfe_gap(point_x, objective_function, feasible_region)
+        #LOGGER.info(f"FW gap over the active set just before outputting = {wolfe_gap}")
         if shared_buffers_dict:
             buffer_lock.acquire()
             global_eta.value = eta
@@ -583,6 +595,7 @@ class ParameterFreeAGD:
                     point_yh, objective_function, feasible_region
                 )
                 if wolfe_gap <= epsilon_f:
+                    print("FW gap over the active set " , wolfe_gap)
                     LOGGER.info("Early halt inside ACC with wolfe_gap <= epsilon_f")
                     return point_yh, grad_mapping, wolfe_gap, eta, sigma, iteration
 

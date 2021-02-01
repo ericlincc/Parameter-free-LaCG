@@ -427,7 +427,7 @@ class ConstrainedL1BallPolytope(_AbstractFeasibleRegion):
                 cost_vector,
                 A_ub=self.G,
                 b_ub=self.h,
-                A_eq=self.A.T,
+                A_eq=self.A,
                 b_eq=self.b,
                 method=self.scipy_solver,
                 bounds=(-np.inf, np.inf),

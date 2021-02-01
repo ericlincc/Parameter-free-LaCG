@@ -279,6 +279,7 @@ class QuadraticDiagonal(_AbstractObjectiveFunction):
         x_diff_norm = (x - y) / np.linalg.norm(x - y)
         return 0.5 * np.dot(x_diff_norm, np.multiply(self.eigenval, x_diff_norm))
 
+
 class RegularizedObjectiveFunction(_AbstractObjectiveFunction):
     """Regularize an objective function with a quadratic function.
     f_{delta} (x) = f (x) + sigma * ||x - x_0||_2^2 / 2

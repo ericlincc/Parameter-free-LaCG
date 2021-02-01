@@ -291,7 +291,6 @@ class ParameterFreeAGD:
         self.iter_sync = iter_sync
         self.estimate_ratio = estimate_ratio
 
-
     def run(
         self,
         objective_function,
@@ -387,7 +386,9 @@ class ParameterFreeAGD:
         iteration = 0
 
         # Early return if primal gap is small
-        strong_wolfe_gap = compute_strong_wolfe_gap(point_x, objective_function, feasible_region)
+        strong_wolfe_gap = compute_strong_wolfe_gap(
+            point_x, objective_function, feasible_region
+        )
         if strong_wolfe_gap <= epsilon_f:
             LOGGER.info("Early halting ACC with wolfe_gap <= epsilon_f")
             if shared_buffers_dict:
@@ -416,7 +417,14 @@ class ParameterFreeAGD:
         )
 
         while np.linalg.norm(grad_mapping) > epsilon and strong_wolfe_gap > epsilon_f:
-            point_x, grad_mapping, strong_wolfe_gap, eta, sigma, _iteration = self.ACC_iter(
+            (
+                point_x,
+                grad_mapping,
+                strong_wolfe_gap,
+                eta,
+                sigma,
+                _iteration,
+            ) = self.ACC_iter(
                 objective_function,
                 feasible_region,
                 point_initial=point_x,
@@ -583,8 +591,17 @@ class ParameterFreeAGD:
                     point_yh, objective_function, feasible_region
                 )
                 if strong_wolfe_gap <= epsilon_f:
-                    LOGGER.info("Early halt inside ACC with strong_wolfe_gap <= epsilon_f")
-                    return point_yh, grad_mapping, strong_wolfe_gap, eta, sigma, iteration
+                    LOGGER.info(
+                        "Early halt inside ACC with strong_wolfe_gap <= epsilon_f"
+                    )
+                    return (
+                        point_yh,
+                        grad_mapping,
+                        strong_wolfe_gap,
+                        eta,
+                        sigma,
+                        iteration,
+                    )
 
                 if (
                     np.linalg.norm(grad_mapping) ** 2 / (eta + sigma)

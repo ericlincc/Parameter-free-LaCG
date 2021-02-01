@@ -47,7 +47,7 @@ class ParameterFreeLaCG(_AbstractAlgorithm):
         self.ratio = 0.5
         self.iter_sync = iter_sync
         self.FAFW = FractionalAwayStepFW(fw_variant=self.fw_variant, ratio=self.ratio)
-        self.ACC = ACC = ParameterFreeAGD()
+        self.ACC = ParameterFreeAGD(iter_sync=self.iter_sync)
 
     def run(
         self,
@@ -289,8 +289,10 @@ class ParameterFreeLaCG(_AbstractAlgorithm):
 
 
 class ParameterFreeAGD:
-    def __init__(self, estimate_ratio=2):
+    def __init__(self, iter_sync=True, estimate_ratio=2):
+        self.iter_sync = iter_sync
         self.estimate_ratio = estimate_ratio
+
 
     def run(
         self,
@@ -443,7 +445,7 @@ class ParameterFreeAGD:
                 else:
                     _global_iter = np.infty
 
-                if _global_iter >= last_restart_iter + iteration:
+                if _global_iter >= last_restart_iter + iteration or not self.iter_sync:
                     # Update shared buffers
                     buffer_lock.acquire()
                     ret_x_cartesian_coordinates[:] = point_x.cartesian_coordinates[:]

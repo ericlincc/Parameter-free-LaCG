@@ -19,15 +19,16 @@ logging.basicConfig(
 )
 
 PATH_TO_PICKLE_BASE = "/scratch/share/pflacg_experiments/pickled_objects"
-dim = 5000
+dim = 100
 l1_regularization = 1.0
 
-constraints = 1500
+constraints = 25
 equality_matrix = np.zeros((constraints, dim))
 equality_vector = np.zeros((constraints))
 entries = random.sample(range(dim), 2*constraints)
 entries_left = entries[:int(len(entries)/2)]
 entries_right = entries[int(len(entries)/2):]
+print(equality_matrix.shape, equality_vector.shape)
 for i in range(constraints):
     equality_matrix[i, entries_left[i]] = 1.0
     equality_matrix[i, entries_right[i]] = -1.0
@@ -45,10 +46,10 @@ feasible_region = ConstrainedL1BallPolytope(
 mat = np.random.rand(dim, dim)
 mat = mat.dot(mat.T) + np.identity(dim)
 
-optimum = 100.0*np.random.rand(dim)
+optimum = 10.0*np.random.rand(dim)
 fun = Quadratic(dim, mat, optimum)
 
-accuracy = 0.0001
+accuracy = 0.00000001
 exit_criterion = ExitCriterion("SWG", accuracy, max_time=1000)
 AFW_algorithm = FrankWolfe("AFW", "line_search") 
 AFW_results, output_point = AFW_algorithm.run(fun, feasible_region, exit_criterion)
@@ -135,6 +136,6 @@ plt.semilogy(
 plt.xlabel("Iteration")
 plt.ylabel("Strong Wolfe Gap")
 plt.legend()
-plt.savefig("L1_ball_comparison_3.pdf")
+plt.savefig("L1_ball_comparison_2.pdf")
 # plt.show()
 plt.close()

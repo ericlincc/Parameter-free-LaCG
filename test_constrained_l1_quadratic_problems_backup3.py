@@ -19,10 +19,10 @@ logging.basicConfig(
 )
 
 PATH_TO_PICKLE_BASE = "/scratch/share/pflacg_experiments/pickled_objects"
-dim = 5000
+dim = 1000
 l1_regularization = 1.0
 
-constraints = 1500
+constraints = 250
 equality_matrix = np.zeros((constraints, dim))
 equality_vector = np.zeros((constraints))
 entries = random.sample(range(dim), 2*constraints)
@@ -135,6 +135,6 @@ plt.semilogy(
 plt.xlabel("Iteration")
 plt.ylabel("Strong Wolfe Gap")
 plt.legend()
-plt.savefig("L1_ball_comparison_3.pdf")
+plt.savefig("L1_ball_comparison_2.pdf")
 # plt.show()
 plt.close()

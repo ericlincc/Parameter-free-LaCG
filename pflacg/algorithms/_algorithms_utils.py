@@ -402,6 +402,7 @@ def argmin_quadratic_over_active_set(
     tolerance_type,
     tolerance,
     base_quadratic=None,
+    max_iter=10 ^ 10,
 ):
     """
     TODO: Add a proper description of the subproblem which this function solves.
@@ -449,6 +450,7 @@ def argmin_quadratic_over_active_set(
         reference_x=np.array(reference_point.cartesian_coordinates),
         tolerance_type=tolerance_type,
         tolerance=tolerance,
+        max_iter=max_iter,
     )
     if not barycentric_coordinates.any():
         LOGGER.info("Projection step is getting stuck. Terminating..")

@@ -6,7 +6,7 @@ from numba import jit
 import numpy as np
 
 
-@jit(nopython=True, cache=True)
+# @jit(nopython=True, cache=True)
 def accelerated_projected_gradient_descent_over_simplex_jit(
     quadratic,
     linear,
@@ -16,6 +16,7 @@ def accelerated_projected_gradient_descent_over_simplex_jit(
     reference_x,
     tolerance_type,
     tolerance,
+    max_iter,
 ):
     """
     TODO: Add a description of the algorithm and its reference.
@@ -55,15 +56,15 @@ def accelerated_projected_gradient_descent_over_simplex_jit(
         return quadratic.dot(x) + linear
 
     def has_met_stopping_criterion(
-        x, wolfe_gap, active_set, reference_x, tolerance_type, tolerance
+        x, best_known_ub, active_set, reference_x, tolerance_type, tolerance
     ):
         if tolerance_type == "dual gap":
-            return wolfe_gap <= tolerance
+            return best_known_ub <= tolerance
         elif tolerance_type == "gradient mapping":
             w = np.zeros(active_set.shape[1])
             for i in range(active_set.shape[0]):
                 w += x[i] * active_set[i]
-            return wolfe_gap <= tolerance * np.linalg.norm(w - reference_x) ** 2
+            return best_known_ub <= tolerance * np.linalg.norm(w - reference_x) ** 2
         else:
             return True
 
@@ -92,12 +93,14 @@ def accelerated_projected_gradient_descent_over_simplex_jit(
         alpha = 0
     else:
         alpha = np.sqrt(q)
+    is_strongly_convex = mu >= 1.0e-3
 
     x = initial_x
     y = initial_x
 
     grad = f_evaluate_grad(x, quadratic, linear, constant)
     wolfe_gap = grad.dot(x - simplex_lp_oracle(grad))
+    best_known_ub = 10000000000.0  # A large enough float64
 
     num_elem_moving_average = 20
     iteration = 0
@@ -105,14 +108,14 @@ def accelerated_projected_gradient_descent_over_simplex_jit(
     previous_wolfe_gaps[0] = wolfe_gap
     moving_average = wolfe_gap
 
-    while not has_met_stopping_criterion(
-        x, wolfe_gap, active_set, reference_x, tolerance_type, tolerance
+    while iteration <= max_iter and not has_met_stopping_criterion(
+        x, best_known_ub, active_set, reference_x, tolerance_type, tolerance
     ):
         x_ = x
         x = simplex_projection(
             y - 1 / L * f_evaluate_grad(y, quadratic, linear, constant)
         )
-        if (mu < 1.0e-3) or q == 1:
+        if q == 1 or not is_strongly_convex:
             alpha_ = alpha
             alpha = 0.5 * (1 + np.sqrt(1 + 4 * alpha_ * alpha_))
             beta = (alpha_ - 1.0) / alpha
@@ -127,6 +130,15 @@ def accelerated_projected_gradient_descent_over_simplex_jit(
         grad = f_evaluate_grad(x, quadratic, linear, constant)
         _wolfe_gap = wolfe_gap
         wolfe_gap = grad.dot(x - simplex_lp_oracle(grad))
+
+        if is_strongly_convex:
+            x_plus = x - grad / mu
+            x_plus = simplex_projection(x_plus)
+            x_x_plus = x - x_plus
+            grad_map_ub = 0.5 * mu * (x_x_plus.dot(x_x_plus))
+            best_known_ub = min(wolfe_gap, grad_map_ub)
+        else:
+            best_known_ub = wolfe_gap
 
         iteration += 1
         moving_average_ = moving_average

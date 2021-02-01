@@ -160,6 +160,7 @@ class ParameterFreeLaCG(_AbstractAlgorithm):
                         sigma,
                         shared_buffers_dict,
                         iteration,
+                        exit_criterion.criterion_value,
                     ),
                 )
                 if len(active_set_ACC) > 1:
@@ -214,9 +215,6 @@ class ParameterFreeLaCG(_AbstractAlgorithm):
             strong_wolfe_gap_ACC = compute_strong_wolfe_gap(
                 point_x_ACC, objective_function, feasible_region
             )
-            assert (
-                strong_wolfe_gap_FAFW <= target_accuracy
-            )  # TODO: remove this after debugging.
 
             if strong_wolfe_gap_FAFW <= min(
                 strong_wolfe_gap_ACC, strong_wolfe_gap_ACC_prev / 2
@@ -389,8 +387,8 @@ class ParameterFreeAGD:
         iteration = 0
 
         # Early return if primal gap is small
-        wolfe_gap = compute_wolfe_gap(point_x, objective_function, feasible_region)
-        if wolfe_gap <= epsilon_f:
+        strong_wolfe_gap = compute_strong_wolfe_gap(point_x, objective_function, feasible_region)
+        if strong_wolfe_gap <= epsilon_f:
             LOGGER.info("Early halting ACC with wolfe_gap <= epsilon_f")
             if shared_buffers_dict:
                 buffer_lock.acquire()
@@ -417,8 +415,8 @@ class ParameterFreeAGD:
             point_x.cartesian_coordinates - point_x_plus.cartesian_coordinates
         )
 
-        while np.linalg.norm(grad_mapping) > epsilon and wolfe_gap > epsilon_f:
-            point_x, grad_mapping, wolfe_gap, eta, sigma, _iteration = self.ACC_iter(
+        while np.linalg.norm(grad_mapping) > epsilon and strong_wolfe_gap > epsilon_f:
+            point_x, grad_mapping, strong_wolfe_gap, eta, sigma, _iteration = self.ACC_iter(
                 objective_function,
                 feasible_region,
                 point_initial=point_x,
@@ -581,12 +579,12 @@ class ParameterFreeAGD:
                 )
                 iteration += _iteration
 
-                wolfe_gap = compute_wolfe_gap(
+                strong_wolfe_gap = strong_compute_wolfe_gap(
                     point_yh, objective_function, feasible_region
                 )
-                if wolfe_gap <= epsilon_f:
-                    LOGGER.info("Early halt inside ACC with wolfe_gap <= epsilon_f")
-                    return point_yh, grad_mapping, wolfe_gap, eta, sigma, iteration
+                if strong_wolfe_gap <= epsilon_f:
+                    LOGGER.info("Early halt inside ACC with strong_wolfe_gap <= epsilon_f")
+                    return point_yh, grad_mapping, strong_wolfe_gap, eta, sigma, iteration
 
                 if (
                     np.linalg.norm(grad_mapping) ** 2 / (eta + sigma)
@@ -605,7 +603,7 @@ class ParameterFreeAGD:
                         global_sigma.value = sigma
                 LOGGER.info(f"Sigma halved: sigma = {sigma}")
 
-        return point_yh, grad_mapping, wolfe_gap, eta, sigma, iteration
+        return point_yh, grad_mapping, strong_wolfe_gap, eta, sigma, iteration
 
     def AGD_iter(
         self,

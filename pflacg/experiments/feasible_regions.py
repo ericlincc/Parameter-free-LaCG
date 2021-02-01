@@ -5,7 +5,9 @@ from abc import ABC, abstractmethod
 import logging
 import math
 
+from cvxopt import matrix, sparse, solvers
 import numpy as np
+from scipy.optimize import linprog
 from scipy.sparse.linalg import eigsh
 
 from pflacg.experiments.experiments_helper import max_vertex
@@ -87,6 +89,14 @@ class ConvexHull(_AbstractFeasibleRegion):
     def __init__(self, vertices):
         self.vertices = vertices
 
+    @property
+    def initial_point(self):
+        return self.vertices[0]
+
+    @property
+    def initial_active_set(self):
+        return [self.vertices[0]]
+
     def lp_oracle(self, d):
         val, index = d.dot(self.vertices[0]), 0
         for _index, vertex in enumerate(self.vertices):
@@ -123,6 +133,89 @@ class BirkhoffPolytope(_AbstractFeasibleRegion):
         solution = np.zeros((self.mat_dim, self.mat_dim))
         solution[matching] = 1
         return solution.reshape(self.dim)
+
+    def away_oracle(self, grad, point_x):
+        return max_vertex(grad, point_x.support)
+
+
+class ConstrainedBirkhoffPolytope(_AbstractFeasibleRegion):
+    def __init__(
+        self,
+        dim,
+        const_vector_ineq=None,
+        const_matrix_ineq=None,
+        const_matrix_eq=None,
+        const_vector_eq=None,
+        linear_equality_vector=None,
+        scipy_solver="revised simplex",
+    ):
+        self.dim = dim
+        self.matdim = int(np.sqrt(dim))
+        self.scipy_solver = scipy_solver
+
+        self.A = np.zeros((2 * self.matdim - 1, self.dim))
+        # Condition on the columns
+        for j in range(self.matdim):
+            for i in range(self.matdim):
+                self.A[j, int(i * self.matdim) + j] = 1.0
+        # Condition on the rows
+        for j in range(self.matdim - 1):
+            for i in range(self.matdim):
+                self.A[self.matdim + j, int(j * self.matdim) + i] = 1.0
+        if linear_equality_vector is not None:
+            self.b = linear_equality_vector
+        else:
+            self.b = np.ones(2 * self.matdim - 1)
+
+        if const_matrix_ineq is not None and const_vector_ineq is not None:
+            num_ineq_constraints, dim_ineq_constraints = const_matrix_ineq.shape
+            if not dim_ineq_constraints == self.dim:
+                raise ValueError(
+                    "Dimension of the inequality constraints does not match the dimensionality of the problem."
+                )
+            self.G = const_matrix_ineq
+            self.h = const_vector_ineq
+        else:
+            self.G = None
+            self.h = None
+
+        if const_matrix_eq is not None and const_vector_eq is not None:
+            num_eq_constraints, dim_eq_constraints = const_matrix_eq.shape
+            if not dim_eq_constraints == self.dim:
+                raise ValueError(
+                    "Dimension of the equality constraints does not match the dimensionality of the problem."
+                )
+            self.A = np.vstack(
+                (
+                    self.A,
+                    const_matrix_eq,
+                )
+            )
+            self.b = np.append(self.b, const_vector_eq).tolist()
+
+    @property
+    def initial_point(self):
+        c = np.ones(self.dim)
+        return self.lp_oracle(c)
+
+    @property
+    def initial_active_set(self):
+        return [self.initial_point()]
+
+    def lp_oracle(self, x):
+        res = linprog(
+            x,
+            A_ub=self.G,
+            b_ub=self.h,
+            A_eq=self.A,
+            b_eq=self.b,
+            method=self.scipy_solver,
+            bounds=(0.0, np.inf),
+        )
+        if res.status == 0:
+            raise Exception("LP oracle did not return succesfully.")
+        optimum = np.array(res.x)
+        return optimum.flatten()
 
     def away_oracle(self, grad, point_x):
         return max_vertex(grad, point_x.support)
@@ -214,6 +307,277 @@ class L1UnitBallPolytope(_AbstractFeasibleRegion):
         theta = float(cssv[rho] - 1.0) / (rho + 1)
         w = (v - theta).clip(min=0)
         return w
+
+
+class ConstrainedL1BallPolytope(_AbstractFeasibleRegion):
+    def __init__(
+        self,
+        l1_regularization,
+        dim,
+        const_matrix_ineq=None,
+        const_vector_ineq=None,
+        const_matrix_eq=None,
+        const_vector_eq=None,
+        solver_type="cvxopt",
+        scipy_solver="revised simplex",
+        sparse_solver=False,
+    ):
+        self.dim = dim
+        self.l1_regularization = l1_regularization
+        self.solver_type = solver_type
+        if not (solver_type == "cvxopt" or solver_type == "scipy"):
+            raise TypeError("Wrong solver type")
+        if solver_type == "cvxopt":
+            solvers.options["show_progress"] = False
+        else:
+            self.scipy_solver = scipy_solver
+        if sparse_solver and not solver_type == "cvxopt":
+            raise TypeError("scipy solver cannot handle sparse matrices.")
+        simplex_dimensionality = int(2 * dim)
+        if const_matrix_ineq is not None and const_vector_ineq is not None:
+            num_ineq_constraints, dim_ineq_constraints = const_matrix_ineq.shape
+            if not (dim_ineq_constraints == self.dim):
+                raise ValueError(
+                    "Dimension of the inequality constraints does not match the dimensionality of the problem."
+                )
+            self.G = np.vstack(
+                (
+                    np.hstack((const_matrix_ineq, -const_matrix_ineq)),
+                    -np.identity(simplex_dimensionality),
+                )
+            )
+            self.h = np.append(const_vector_ineq, np.zeros(simplex_dimensionality))
+            if solver_type == "cvxopt":
+                self.G = matrix(
+                    self.G,
+                    (
+                        simplex_dimensionality + num_ineq_constraints,
+                        simplex_dimensionality,
+                    ),
+                )
+                if sparse_solver:
+                    self.G = sparse(self.G)
+                self.h = matrix(
+                    self.h, (simplex_dimensionality + num_ineq_constraints, 1)
+                )
+        else:
+            self.G = -np.identity(simplex_dimensionality)
+            self.h = np.zeros(simplex_dimensionality)
+            if solver_type == "cvxopt":
+                self.G = matrix(
+                    self.G,
+                )
+                self.h = matrix(self.h, (simplex_dimensionality, 1))
+                if sparse_solver:
+                    self.G = sparse(self.G)
+
+        if const_matrix_eq is not None and const_vector_eq is not None:
+            num_eq_constraints, dim_eq_constraints = const_matrix_eq.shape
+            if not dim_eq_constraints == self.dim:
+                raise ValueError(
+                    "Dimension of the equality constraints does not match the dimensionality of the problem."
+                )
+            self.A = np.vstack(
+                (
+                    np.hstack((const_matrix_eq, -const_matrix_eq)),
+                    np.ones(simplex_dimensionality),
+                )
+            )
+            self.b = np.append(const_vector_eq, self.l1_regularization).tolist()
+            if solver_type == "cvxopt":
+                self.A = matrix(
+                    self.A, (1 + num_eq_constraints, simplex_dimensionality)
+                )
+                self.b = matrix(self.b, (1 + len(const_vector_eq), 1), "d")
+                if sparse_solver:
+                    self.A = sparse(self.A)
+        else:
+            self.A = np.ones(simplex_dimensionality)
+            self.b = self.l1_regularization
+            if solver_type == "cvxopt":
+                self.A = matrix(self.A, (1, simplex_dimensionality))
+                self.b = matrix(self.b)
+            else:
+                self.A = np.ones(simplex_dimensionality).reshape(
+                    (simplex_dimensionality, 1)
+                )
+                self.b = np.asarray(self.b).reshape((1,))
+
+    @property
+    def initial_point(self):
+        c = np.ones(self.dim)
+        return self.lp_oracle(c)
+
+    @property
+    def initial_active_set(self):
+        return [self.initial_point()]
+
+    def lp_oracle(self, x):
+        cost_vector = np.hstack((x, -x))
+        if self.solver_type == "cvxopt":
+            sol = solvers.lp(
+                matrix(cost_vector),
+                self.G,
+                self.h,
+                self.A,
+                self.b,
+                solver="cvxopt_glpk",
+            )
+            if not sol["status"] == "optimal":
+                raise Exception("Algorithm did not converge.")
+            optimum = np.array(sol["x"])
+            return (
+                optimum[: int(len(optimum) / 2)] - optimum[int(len(optimum) / 2) :]
+            ).flatten()
+        else:
+            res = linprog(
+                cost_vector,
+                A_ub=self.G,
+                b_ub=self.h,
+                A_eq=self.A,
+                b_eq=self.b,
+                method=self.scipy_solver,
+                bounds=(-np.inf, np.inf),
+            )
+            if not res.status == 0:
+                raise Exception("LP oracle did not return succesfully.")
+            optimum = np.array(res.x)
+            return (
+                optimum[: int(len(optimum) / 2)] - optimum[int(len(optimum) / 2) :]
+            ).flatten()
+
+    def away_oracle(self, grad, point_x):
+        return max_vertex(grad, point_x.support)
+
+
+class GeneralPolytope(_AbstractFeasibleRegion):
+    def __init__(
+        self,
+        dim,
+        const_matrix_ineq=None,
+        const_vector_ineq=None,
+        const_matrix_eq=None,
+        const_vector_eq=None,
+        solver_type="cvxopt",
+        scipy_solver="revised simplex",
+        sparse_solver=False,
+    ):
+        self.dim = dim
+        self.solver_type = solver_type
+        if not (solver_type == "cvxopt" or solver_type == "scipy"):
+            raise TypeError("Wrong solver type")
+        if solver_type == "cvxopt":
+            solvers.options["show_progress"] = False
+        else:
+            self.scipy_solver = scipy_solver
+        if sparse_solver and solver_type == "scipy":
+            raise TypeError("scipy solver cannot handle sparse matrices.")
+        if const_matrix_ineq is not None and const_vector_ineq is not None:
+            num_ineq_constraints, dim_ineq_constraints = const_matrix_ineq.shape
+            if not dim_ineq_constraints == self.dim:
+                raise ValueError(
+                    "Dimension of the inequality constraints does not match the dimensionality of the problem."
+                )
+            self.G = const_matrix_ineq
+            self.h = const_vector_ineq
+            if solver_type == "cvxopt":
+                self.G = matrix(self.G, (num_ineq_constraints, dim_ineq_constraints))
+                if sparse_solver:
+                    self.G = sparse(self.G)
+                self.h = matrix(self.h, (num_ineq_constraints, 1))
+        else:
+            self.G = None
+            self.h = None
+
+        if const_matrix_eq is not None and const_vector_eq is not None:
+            num_eq_constraints, dim_eq_constraints = const_matrix_eq.shape
+            if not (dim_eq_constraints == self.dim):
+                raise ValueError(
+                    "Dimension of the equality constraints does not match the dimensionality of the problem."
+                )
+            self.A = const_matrix_eq
+            self.b = const_vector_eq
+            if solver_type == "cvxopt":
+                self.A = matrix(self.A, (num_eq_constraints, dim_eq_constraints))
+                self.b = matrix(self.b, (num_eq_constraints, 1), "d")
+                if sparse_solver:
+                    self.A = sparse(self.A)
+        else:
+            self.A = None
+            self.b = None
+
+    @property
+    def initial_point(self):
+        c = np.ones(self.dim)
+        return self.lp_oracle(c)
+
+    @property
+    def initial_active_set(self):
+        return [self.initial_point()]
+
+    def lp_oracle(self, x):
+        if self.solver_type == "cvxopt":
+            if self.G is not None and self.h is not None:
+                if self.A is not None and self.b is not None:
+                    sol = solvers.lp(
+                        matrix(x),
+                        G=self.G,
+                        h=self.h,
+                        A=self.A,
+                        b=self.b,
+                        solver="cvxopt_glpk",
+                    )
+                else:
+                    sol = solvers.lp(
+                        matrix(x), G=self.G, h=self.h, solver="cvxopt_glpk"
+                    )
+            else:
+                if self.A is not None and self.b is not None:
+                    sol = solvers.lp(
+                        matrix(x), A=self.A, b=self.b, solver="cvxopt_glpk"
+                    )
+                else:
+                    raise ValueError("The problem has no constraintsts")
+            if not sol["status"] == "optimal":
+                raise Exception("Algorithm did not converge.")
+            return np.array(sol["x"]).flatten()
+        else:
+            if self.G is not None and self.h is not None:
+                if self.A is not None and self.b is not None:
+                    res = linprog(
+                        x,
+                        A_ub=self.G,
+                        b_ub=self.h,
+                        A_eq=self.A.T,
+                        b_eq=self.b,
+                        method=self.scipy_solver,
+                        bounds=(-np.inf, np.inf),
+                    )
+                else:
+                    res = linprog(
+                        x,
+                        A_ub=self.G,
+                        b_ub=self.h,
+                        method=self.scipy_solver,
+                        bounds=(-np.inf, np.inf),
+                    )
+            else:
+                if self.A is not None and self.b is not None:
+                    res = linprog(
+                        x,
+                        A_eq=self.A.T,
+                        b_eq=self.b,
+                        method=self.scipy_solver,
+                        bounds=(-np.inf, np.inf),
+                    )
+                else:
+                    raise ValueError("The problem has no constraintsts")
+            if not res.status == 0:
+                raise Exception("LP oracle did not return succesfully.")
+            return np.array(res.x).flatten()
+
+    def away_oracle(self, grad, point_x):
+        return max_vertex(grad, point_x.support)
 
 
 class L2UnitBallPolytope(_AbstractFeasibleRegion):

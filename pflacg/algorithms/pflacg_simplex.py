@@ -123,7 +123,7 @@ class ParameterFreeLaCGSimplex(_AbstractAlgorithm):
         objective_function,
         feasible_region,
         exit_criterion,
-        point_initial,
+        point_initial = None,
     ):
         
         if point_initial is None:

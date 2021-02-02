@@ -251,61 +251,71 @@ def plot_results(args):
         "wolfe_gap": 3,
         "strong_wolfe_gap": 4,
     }
+    x_label_dict = {
+        "time": r"t[s]",
+        "iteration": r"$k$",
+    }
+    y_label_dict = {
+        "primal_gap": r"$f(x_k) - f(x*)$",
+        "strong_wolfe_gap": r"$w(x_k, S_k)$",
+    }
 
     if args.plot_config:
         # If plot_config, use configs from plot_configs only.
         with open(args.plot_config, "r") as f:
             plot_config = json.load(f)
 
-        if plot_config["x_axis"] == "time":
-            x_label = r"t[s]"
-        elif plot_config["x_axis"] == "iteration":
-            x_label = r"$k$"
-        else:
-            raise ValueError("invalid value for y_axis")
-
+        y_label = y_label_dict[plot_config["y_axis"]]
         if plot_config["y_axis"] == "primal_gap":
-            y_label = r"$f(x_k) - f(x*)$"
             ref_opt = plot_config["known_optimal_f_val"]
         elif plot_config["y_axis"] == "strong_wolfe_gap":
-            y_label = r"$w(x_k, S_k)$"
-            ref_opt = 0
+            ref_opt = 0.0
         else:
             raise ValueError("invalid value for y_axis")
 
-        list_x = []
-        list_y = []
-        list_legend = []
+        list_xs = []
+        list_ys = []
+        legends = []
         colors = []
         markers = []
-        for run_result in plot_config["run_results"]:
-            markers.append(run_result["marker"])
-            colors.append(run_result["color"])
-            list_legend.append(run_result["name"])
+        list_x_label = []
+        for x_axis in plot_config["list_x_axis"]:
+            list_x_label.append(x_label_dict[x_axis])
 
-            x = []
-            y = []
-            with open(run_result["path_to_result"], "r") as f:
-                for line in f:
-                    run_status = json.loads(line.strip())
-                    x.append(run_status[run_status_index[plot_config["x_axis"]]])
-                    y.append(
-                        run_status[run_status_index[plot_config["y_axis"]]] - ref_opt
-                    )
-            list_x.append(x)
-            list_y.append(y)
+            xs = []
+            ys = []
+            for run_result in plot_config["run_results"]:
+                if not list_xs:
+                    markers.append(run_result["marker"])
+                    colors.append(run_result["color"])
+                    legends.append(run_result["name"])
+
+                x = []
+                y = []
+                with open(run_result["path_to_result"], "r") as f:
+                    for line in f:
+                        run_status = json.loads(line.strip())
+                        x.append(run_status[run_status_index[x_axis]])
+                        y.append(
+                            run_status[run_status_index[plot_config["y_axis"]]]
+                            - ref_opt
+                        )
+                xs.append(x)
+                ys.append(y)
+            list_xs.append(xs)
+            list_ys.append(ys)
 
         save_path = path.join(
             args.save_location,
-            f"plot-{plot_config['y_axis']}-{plot_config['x_axis']}-{get_current_timestamp()}.png",
+            f"plot-{plot_config['y_axis']}-{'_'.join(plot_config['list_x_axis'])}-{get_current_timestamp()}.png",
         )
         helper.plot_pretty(
-            list_x=list_x,
-            list_y=list_y,
-            list_legend=list_legend,
+            list_xs=list_xs,
+            list_ys=list_ys,
+            legends=legends,
             colors=colors,
             markers=markers,
-            x_label=x_label,
+            list_x_label=list_x_label,
             y_label=y_label,
             save_path=save_path,
             **plot_config,

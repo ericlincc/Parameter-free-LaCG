@@ -103,22 +103,23 @@ def construct_dictionary_indices(graph):
 
 
 def plot_pretty(
-    list_x,
-    list_y,
-    list_legend,
+    list_xs,
+    list_ys,
+    legends,
     colors,
     markers,
-    x_label,
+    list_x_label,
     y_label,
     save_path,
     title=None,
+    list_legend_location=None,
+    put_legend_outside=False,  # TODO: If true, may have unexpected behaviours.
     log_x=False,
     log_y=True,
-    legend_location=None,
-    put_legend_outside=False,
-    x_limits=None,
-    y_limits=None,
+    x_limits=None,  # TODO: If not None, may have unexpected behaviours.
+    y_limits=None,  # TODO: If not None, may have unexpected behaviours.
     dpi=None,
+    figsize=(16, 9),
     title_font_size=19,
     label_font_size=19,
     axis_font_size=12,
@@ -127,124 +128,147 @@ def plot_pretty(
     linewidth_figures=4.0,
     **kwargs,
 ):
+    # TODO: This function contains known bugs.
+
+    if len(list_xs) > 9:
+        raise Exception("plot_pretty() is not designed to handle more than 9 subplots")
 
     plt.rcParams.update({"font.size": axis_font_size})
+    plt.rcParams["figure.figsize"] = figsize
+    is_leftmost = True
+    ax = None
 
-    for i in range(len(list_y)):
-        if list_legend:
-            if log_x and log_y:
-                plt.loglog(
-                    list_x[i],
-                    list_y[i],
-                    colors[i],
-                    marker=markers[i],
-                    markersize=marker_size,
-                    markevery=np.logspace(0, np.log10(len(list_y[i]) - 2), 10)
-                    .astype(int)
-                    .tolist(),
-                    linewidth=linewidth_figures,
-                    label=list_legend[i],
-                )
-            if log_x and not log_y:
-                plt.semilogx(
-                    list_x[i],
-                    list_y[i],
-                    colors[i],
-                    marker=markers[i],
-                    markersize=marker_size,
-                    linewidth=linewidth_figures,
-                    label=list_legend[i],
-                )
-            if not log_x and log_y:
-                plt.semilogy(
-                    list_x[i],
-                    list_y[i],
-                    colors[i],
-                    marker=markers[i],
-                    markersize=marker_size,
-                    markevery=np.linspace(
-                        0, len(list_y[i]) - 2, 10, dtype=int
-                    ).tolist(),
-                    linewidth=linewidth_figures,
-                    label=list_legend[i],
-                )
-            if not log_x and not log_y:
-                plt.plot(
-                    list_x[i],
-                    list_y[i],
-                    colors[i],
-                    marker=markers[i],
-                    markersize=marker_size,
-                    markevery=np.linspace(
-                        0, len(list_y[i]) - 2, 10, dtype=int
-                    ).tolist(),
-                    linewidth=2.0,
-                    label=list_legend[i],
-                )
+    for j, (xs, ys) in enumerate(zip(list_xs, list_ys)):
+
+        ax = plt.subplot(int(f"{1}{len(list_xs)+1}{j+1}"), sharey=ax)
+
+        for i in range(len(ys)):
+            if legends:
+                if log_x and log_y:
+                    plt.loglog(
+                        xs[i],
+                        ys[i],
+                        colors[i],
+                        marker=markers[i],
+                        markersize=marker_size,
+                        markevery=np.logspace(0, np.log10(len(ys[i]) - 2), 10)
+                        .astype(int)
+                        .tolist(),
+                        linewidth=linewidth_figures,
+                        label=legends[i],
+                    )
+                if log_x and not log_y:
+                    plt.semilogx(
+                        xs[i],
+                        ys[i],
+                        colors[i],
+                        marker=markers[i],
+                        markersize=marker_size,
+                        linewidth=linewidth_figures,
+                        label=legends[i],
+                    )
+                if not log_x and log_y:
+                    plt.semilogy(
+                        xs[i],
+                        ys[i],
+                        colors[i],
+                        marker=markers[i],
+                        markersize=marker_size,
+                        markevery=np.linspace(
+                            0, len(ys[i]) - 2, 10, dtype=int
+                        ).tolist(),
+                        linewidth=linewidth_figures,
+                        label=legends[i],
+                    )
+                if not log_x and not log_y:
+                    plt.plot(
+                        xs[i],
+                        ys[i],
+                        colors[i],
+                        marker=markers[i],
+                        markersize=marker_size,
+                        markevery=np.linspace(
+                            0, len(ys[i]) - 2, 10, dtype=int
+                        ).tolist(),
+                        linewidth=2.0,
+                        label=legends[i],
+                    )
+            else:
+                if log_x and log_y:
+                    plt.loglog(
+                        xs[i],
+                        ys[i],
+                        colors[i],
+                        marker=markers[i],
+                        markersize=marker_size,
+                        markevery=np.logspace(0, np.log10(len(ys[i]) - 2), 10)
+                        .astype(int)
+                        .tolist(),
+                        linewidth=linewidth_figures,
+                    )
+                if log_x and not log_y:
+                    plt.semilogx(
+                        xs[i],
+                        ys[i],
+                        colors[i],
+                        marker=markers[i],
+                        markersize=marker_size,
+                        linewidth=linewidth_figures,
+                    )
+                if not log_x and log_y:
+                    plt.semilogy(
+                        xs[i],
+                        ys[i],
+                        colors[i],
+                        marker=markers[i],
+                        markersize=marker_size,
+                        markevery=np.linspace(
+                            0, len(ys[i]) - 2, 10, dtype=int
+                        ).tolist(),
+                        linewidth=linewidth_figures,
+                    )
+                if not log_x and not log_y:
+                    plt.plot(
+                        xs[i],
+                        ys[i],
+                        colors[i],
+                        marker=markers[i],
+                        markersize=marker_size,
+                        markevery=np.linspace(
+                            0, len(ys[i]) - 2, 10, dtype=int
+                        ).tolist(),
+                        linewidth=linewidth_figures,
+                    )
+
+        plt.xlabel(list_x_label[j], fontsize=label_font_size)
+        if is_leftmost:
+            plt.ylabel(y_label, fontsize=label_font_size)
         else:
-            if log_x and log_y:
-                plt.loglog(
-                    list_x[i],
-                    list_y[i],
-                    colors[i],
-                    marker=markers[i],
-                    markersize=marker_size,
-                    markevery=np.logspace(0, np.log10(len(list_y[i]) - 2), 10)
-                    .astype(int)
-                    .tolist(),
-                    linewidth=linewidth_figures,
+            plt.setp(ax.get_yticklabels(), visible=False)
+
+        if legends:
+            if list_legend_location[j] is not None:
+                plt.legend(fontsize=legend_font_size, loc=list_legend_location[j])
+            elif put_legend_outside:
+                plt.legend(
+                    fontsize=legend_font_size,
+                    loc="center left",
+                    bbox_to_anchor=(1, 0.5),
                 )
-            if log_x and not log_y:
-                plt.semilogx(
-                    list_x[i],
-                    list_y[i],
-                    colors[i],
-                    marker=markers[i],
-                    markersize=marker_size,
-                    linewidth=linewidth_figures,
-                )
-            if not log_x and log_y:
-                plt.semilogy(
-                    list_x[i],
-                    list_y[i],
-                    colors[i],
-                    marker=markers[i],
-                    markersize=marker_size,
-                    markevery=np.linspace(
-                        0, len(list_y[i]) - 2, 10, dtype=int
-                    ).tolist(),
-                    linewidth=linewidth_figures,
-                )
-            if not log_x and not log_y:
-                plt.plot(
-                    list_x[i],
-                    list_y[i],
-                    colors[i],
-                    marker=markers[i],
-                    markersize=marker_size,
-                    markevery=np.linspace(
-                        0, len(list_y[i]) - 2, 10, dtype=int
-                    ).tolist(),
-                    linewidth=linewidth_figures,
-                )
-    if title:
-        plt.title(title, fontsize=title_font_size)
-    plt.ylabel(y_label, fontsize=label_font_size)
-    plt.xlabel(x_label, fontsize=label_font_size)
+            else:
+                pass
+
+        plt.tight_layout()
+        plt.grid(True, which="both")
+
+        is_leftmost = False
+
     if x_limits is not None:
         plt.xlim(x_limits)
     if y_limits is not None:
         plt.ylim(y_limits)
-    if list_legend:
-        if legend_location is not None:
-            plt.legend(fontsize=legend_font_size, loc=legend_location)
-        elif put_legend_outside:
-            plt.legend(
-                fontsize=legend_font_size, loc="center left", bbox_to_anchor=(1, 0.5)
-            )
-        else:
-            plt.legend(fontsize=legend_font_size)
-    plt.tight_layout()
-    plt.grid(True, which="both")
+
+    if title:
+        plt.suptitle(title, fontsize=title_font_size)
     plt.savefig(save_path, dpi=dpi, format="png", bbox_inches="tight")
     plt.close()

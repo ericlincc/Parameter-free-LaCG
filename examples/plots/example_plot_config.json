@@ -1,5 +1,5 @@
 {
-  "x_axis": "time",
+  "list_x_axis": ["iteration", "time"],
   "y_axis": "strong_wolfe_gap",
   "run_results": [
     {
@@ -19,15 +19,16 @@
   "title": null,
   "log_x": false,
   "log_y": true,
-  "legend_location": null,
+  "list_legend_location" : [1, null],
   "put_legend_outside": false,
   "x_limits": null,
   "y_limits": null,
   "dpi": 600,
+  "figsize": [20, 5],
   "marker_size": 12,
   "title_font_size": 19,
   "label_font_size": 19,
   "axis_font_size": 12,
-  "legend_font_size": 20,
+  "legend_font_size": 12,
   "linewidth_figures": 1.0
 }

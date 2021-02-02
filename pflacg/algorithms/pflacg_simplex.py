@@ -125,7 +125,11 @@ class ParameterFreeLaCGSimplex(_AbstractAlgorithm):
         exit_criterion,
         point_initial,
     ):
-
+        
+        if point_initial is None:
+            x = feasible_region.initial_point.copy()
+        else:
+            x = point_initial
         active_set_reference_point = np.ones(len(point_initial)) / point_initial
         # Initialization
         strong_wolfe_gap_out, wolfe_gap_out = compute_strong_wolfe_gap_simplex_reduced(

@@ -265,10 +265,10 @@ def plot_results(args):
             raise ValueError("invalid value for y_axis")
 
         if plot_config["y_axis"] == "primal_gap":
-            y_label = r"$f(x_k) - f(x^*)$"
+            y_label = r"$f(x_k) - f(x*)$"
             ref_opt = plot_config["known_optimal_f_val"]
         elif plot_config["y_axis"] == "strong_wolfe_gap":
-            y_label = r"$w(x, S)$"
+            y_label = r"$w(x_k, S_k)$"
             ref_opt = 0
         else:
             raise ValueError("invalid value for y_axis")

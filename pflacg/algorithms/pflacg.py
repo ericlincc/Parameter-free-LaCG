@@ -587,7 +587,7 @@ class ParameterFreeAGD:
                 )
                 iteration += _iteration
 
-                strong_wolfe_gap = strong_compute_wolfe_gap(
+                strong_wolfe_gap = compute_strong_wolfe_gap(
                     point_yh, objective_function, feasible_region
                 )
                 if strong_wolfe_gap <= epsilon_f:

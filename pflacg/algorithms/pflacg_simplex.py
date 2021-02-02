@@ -128,7 +128,7 @@ class ParameterFreeLaCGSimplex(_AbstractAlgorithm):
         
         if point_initial is None:
             point_initial = feasible_region.initial_point.copy()
-        active_set_reference_point = np.ones(len(point_initial)) / point_initial
+        active_set_reference_point = np.ones(len(point_initial)) / len(point_initial)
         # Initialization
         strong_wolfe_gap_out, wolfe_gap_out = compute_strong_wolfe_gap_simplex_reduced(
             point_initial, objective_function, active_set_reference_point
@@ -266,7 +266,7 @@ class ParameterFreeLaCGSimplex(_AbstractAlgorithm):
                 strong_wolfe_gap_ACC,
                 wolfe_gap_ACC,
             ) = compute_strong_wolfe_gap_simplex_reduced(
-                x_ACC, objective_function, np.ones(len(point_initial)) / point_initial
+                x_ACC, objective_function, np.ones(len(point_initial)) / len(point_initial)
             )
             LOGGER.info(f"FAFW SWG = {strong_wolfe_gap_FAFW}")
             LOGGER.info(f"ACC SWG = {strong_wolfe_gap_ACC}")

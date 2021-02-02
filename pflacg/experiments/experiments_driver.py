@@ -244,19 +244,6 @@ def run_algorithms(args):
 def plot_results(args):
     """Plot graphs from run histories."""
 
-    # loading results into memory
-    names_results = []
-    for path_to_result in args.path_to_results:
-        algorithm_name = path_to_result.split("/")[-1].split("_")[0]
-        name_result = (algorithm_name, [])
-        with open(path_to_result, "r") as f:
-            for line in f:
-                run_status = json.loads(line.strip())
-                name_result[1].append(run_status)
-        names_results.append(name_result)
-
-    # TODO: add safety checks
-
     run_status_index = {
         "iteration": 0,
         "time": 1,
@@ -264,36 +251,111 @@ def plot_results(args):
         "wolfe_gap": 3,
         "strong_wolfe_gap": 4,
     }
-    if args.y_axis == "primal_gap":
-        ref_opt = args.known_optimal_f_val
-        plt.ylabel(r"$f(x_k) - f(x^*)$")
-    else:
-        ref_opt = 0.0
-        plt.ylabel(r"$g(x_k)$")
-    if args.x_axis == "time":
-        plt.xlabel(r"t[s]")
-    else:
-        plt.xlabel(r"$k$")
 
-    for name_result in names_results:
-        name, result = name_result
-        gaps = [
-            run_status[run_status_index[args.y_axis]] - ref_opt for run_status in result
-        ]
-        x_axis = [run_status[run_status_index[args.x_axis]] for run_status in result]
-        plt.semilogy(x_axis, gaps, label=name)
+    if args.plot_config:
+        # If plot_config, use configs from plot_configs only.
+        with open(args.plot_config, "r") as f:
+            plot_config = json.load(f)
 
-    plt.grid()
-    plt.tight_layout()
-    plt.legend()
+        if plot_config["x_axis"] == "time":
+            x_label = r"t[s]"
+        elif plot_config["x_axis"] == "iteration":
+            x_label = r"$k$"
+        else:
+            raise ValueError("invalid value for y_axis")
 
-    # Save timestamp for later identification
-    timestamp = get_current_timestamp()
-    plt.savefig(
-        path.join(
-            args.save_location, f"plot-{args.y_axis}-{args.x_axis}-{timestamp}.png"
+        if plot_config["y_axis"] == "primal_gap":
+            y_label = r"$f(x_k) - f(x^*)$"
+            ref_opt = plot_config["known_optimal_f_val"]
+        elif plot_config["y_axis"] == "strong_wolfe_gap":
+            y_label = r"$w(x, S)$"
+            ref_opt = 0
+        else:
+            raise ValueError("invalid value for y_axis")
+
+        list_x = []
+        list_y = []
+        list_legend = []
+        colors = []
+        markers = []
+        for run_result in plot_config["run_results"]:
+            markers.append(run_result["marker"])
+            colors.append(run_result["color"])
+            list_legend.append(run_result["name"])
+
+            x = []
+            y = []
+            with open(run_result["path_to_result"], "r") as f:
+                for line in f:
+                    run_status = json.loads(line.strip())
+                    x.append(run_status[run_status_index[plot_config["x_axis"]]])
+                    y.append(
+                        run_status[run_status_index[plot_config["y_axis"]]] - ref_opt
+                    )
+            list_x.append(x)
+            list_y.append(y)
+
+        save_path = path.join(
+            args.save_location,
+            f"plot-{plot_config['y_axis']}-{plot_config['x_axis']}-{get_current_timestamp()}.png",
         )
-    )
+        helper.plot_pretty(
+            list_x=list_x,
+            list_y=list_y,
+            list_legend=list_legend,
+            colors=colors,
+            markers=markers,
+            x_label=x_label,
+            y_label=y_label,
+            save_path=save_path,
+            **plot_config,
+        )
+
+    else:
+        # loading results into memory
+        names_results = []
+        for path_to_result in args.path_to_results:
+            algorithm_name = path_to_result.split("/")[-1].split("_")[0]
+            name_result = (algorithm_name, [])
+            with open(path_to_result, "r") as f:
+                for line in f:
+                    run_status = json.loads(line.strip())
+                    name_result[1].append(run_status)
+            names_results.append(name_result)
+
+        if args.y_axis == "primal_gap":
+            ref_opt = args.known_optimal_f_val
+            plt.ylabel(r"$f(x_k) - f(x^*)$")
+        else:
+            ref_opt = 0.0
+            plt.ylabel(r"$g(x_k)$")
+        if args.x_axis == "time":
+            plt.xlabel(r"t[s]")
+        else:
+            plt.xlabel(r"$k$")
+
+        for name_result in names_results:
+            name, result = name_result
+            gaps = [
+                run_status[run_status_index[args.y_axis]] - ref_opt
+                for run_status in result
+            ]
+            x_axis = [
+                run_status[run_status_index[args.x_axis]] for run_status in result
+            ]
+            plt.semilogy(x_axis, gaps, label=name)
+
+        plt.grid()
+        plt.tight_layout()
+        plt.legend()
+
+        # Save timestamp for later identification
+        plt.savefig(
+            path.join(
+                args.save_location,
+                f"plot-{args.y_axis}-{args.x_axis}-{get_current_timestamp()}.png",
+            )
+        )
 
 
 def run_algorithms_parser(argv_remaining):
@@ -399,10 +461,19 @@ def plot_results_parser(argv_remaining):
         help="Save location of plotted results",
     )
     parser.add_argument(
+        "--plot_config",
+        type=str,
+        required=False,
+        help=(
+            "Config json file for plotting a nice graph (see example). "
+            "If provided, ignoring other arguments except save_location"
+        ),
+    )
+    parser.add_argument(
         "--path_to_results",
         type=str,
         nargs="+",
-        required=True,
+        required=False,
         help="Save locations of algorithm run results to be plotted",
     )
     parser.add_argument(
@@ -415,14 +486,14 @@ def plot_results_parser(argv_remaining):
     parser.add_argument(
         "--y_axis",
         type=str,
-        required=True,
+        required=False,
         choices=["primal_gap", "wolfe_gap", "strong_wolfe_gap"],
         help="Y-axis: primal gap or wolfe gap or strong_wolfe_gap",
     )
     parser.add_argument(
         "--x_axis",
         type=str,
-        required=True,
+        required=False,
         choices=["time", "iteration"],
         help="Quantity of x-axis to be plotted",
     )

@@ -3,7 +3,10 @@
 
 
 import numpy as np
+from matplotlib import rc
+import matplotlib.pyplot as plt
 import networkx as nx
+from scipy.interpolate import griddata
 
 from pflacg.algorithms._algorithms_utils import Point
 
@@ -97,3 +100,151 @@ def construct_dictionary_indices(graph):
         dictionary[i] = iter_count
         iter_count += 1
     return dictionary
+
+
+def plot_pretty(
+    list_x,
+    list_y,
+    list_legend,
+    colors,
+    markers,
+    x_label,
+    y_label,
+    save_path,
+    title=None,
+    log_x=False,
+    log_y=True,
+    legend_location=None,
+    put_legend_outside=False,
+    x_limits=None,
+    y_limits=None,
+    dpi=None,
+    title_font_size=19,
+    label_font_size=19,
+    axis_font_size=12,
+    marker_size=12,
+    legend_font_size=20,
+    linewidth_figures=4.0,
+    **kwargs,
+):
+
+    plt.rcParams.update({"font.size": axis_font_size})
+
+    for i in range(len(list_y)):
+        if list_legend:
+            if log_x and log_y:
+                plt.loglog(
+                    list_x[i],
+                    list_y[i],
+                    colors[i],
+                    marker=markers[i],
+                    markersize=marker_size,
+                    markevery=np.logspace(0, np.log10(len(list_y[i]) - 2), 10)
+                    .astype(int)
+                    .tolist(),
+                    linewidth=linewidth_figures,
+                    label=list_legend[i],
+                )
+            if log_x and not log_y:
+                plt.semilogx(
+                    list_x[i],
+                    list_y[i],
+                    colors[i],
+                    marker=markers[i],
+                    markersize=marker_size,
+                    linewidth=linewidth_figures,
+                    label=list_legend[i],
+                )
+            if not log_x and log_y:
+                plt.semilogy(
+                    list_x[i],
+                    list_y[i],
+                    colors[i],
+                    marker=markers[i],
+                    markersize=marker_size,
+                    markevery=np.linspace(
+                        0, len(list_y[i]) - 2, 10, dtype=int
+                    ).tolist(),
+                    linewidth=linewidth_figures,
+                    label=list_legend[i],
+                )
+            if not log_x and not log_y:
+                plt.plot(
+                    list_x[i],
+                    list_y[i],
+                    colors[i],
+                    marker=markers[i],
+                    markersize=marker_size,
+                    markevery=np.linspace(
+                        0, len(list_y[i]) - 2, 10, dtype=int
+                    ).tolist(),
+                    linewidth=2.0,
+                    label=list_legend[i],
+                )
+        else:
+            if log_x and log_y:
+                plt.loglog(
+                    list_x[i],
+                    list_y[i],
+                    colors[i],
+                    marker=markers[i],
+                    markersize=marker_size,
+                    markevery=np.logspace(0, np.log10(len(list_y[i]) - 2), 10)
+                    .astype(int)
+                    .tolist(),
+                    linewidth=linewidth_figures,
+                )
+            if log_x and not log_y:
+                plt.semilogx(
+                    list_x[i],
+                    list_y[i],
+                    colors[i],
+                    marker=markers[i],
+                    markersize=marker_size,
+                    linewidth=linewidth_figures,
+                )
+            if not log_x and log_y:
+                plt.semilogy(
+                    list_x[i],
+                    list_y[i],
+                    colors[i],
+                    marker=markers[i],
+                    markersize=marker_size,
+                    markevery=np.linspace(
+                        0, len(list_y[i]) - 2, 10, dtype=int
+                    ).tolist(),
+                    linewidth=linewidth_figures,
+                )
+            if not log_x and not log_y:
+                plt.plot(
+                    list_x[i],
+                    list_y[i],
+                    colors[i],
+                    marker=markers[i],
+                    markersize=marker_size,
+                    markevery=np.linspace(
+                        0, len(list_y[i]) - 2, 10, dtype=int
+                    ).tolist(),
+                    linewidth=linewidth_figures,
+                )
+    if title:
+        plt.title(title, fontsize=title_font_size)
+    plt.ylabel(y_label, fontsize=label_font_size)
+    plt.xlabel(x_label, fontsize=label_font_size)
+    if x_limits is not None:
+        plt.xlim(x_limits)
+    if y_limits is not None:
+        plt.ylim(y_limits)
+    if list_legend:
+        if legend_location is not None:
+            plt.legend(fontsize=legend_font_size, loc=legend_location)
+        elif put_legend_outside:
+            plt.legend(
+                fontsize=legend_font_size, loc="center left", bbox_to_anchor=(1, 0.5)
+            )
+        else:
+            plt.legend(fontsize=legend_font_size)
+    plt.tight_layout()
+    plt.grid(True, which="both")
+    plt.savefig(save_path, dpi=dpi, format="png", bbox_inches="tight")
+    plt.close()

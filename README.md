@@ -51,3 +51,9 @@ python -m pflacg.experiments.experiments_driver --task run_algorithms \
     --single_cpu_mode \
     --save_logging \
 ```
+
+```
+python -m pflacg.experiments.experiments_driver --task plot_results \
+    --save_location "your/save/location" \
+    --plot_config "examples/plots/plot_config.json"
+```

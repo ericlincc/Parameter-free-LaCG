@@ -1,13 +1,13 @@
 [
   {
     "name": "CGS",
-    "class_name": "ConditionalGradientSliding",
+    "class_name": "ConditionalGradientSlidingSimplex",
     "args": {
     }
   },
   {
     "name": "AFW",
-    "class_name": "FrankWolfe",
+    "class_name": "FrankWolfeSimplex",
     "args": {
       "fw_variant": "AFW",
       "step_type": "line_search"
@@ -15,7 +15,7 @@
   },
   {
     "name": "PFW",
-    "class_name": "FrankWolfe",
+    "class_name": "FrankWolfeSimplex",
     "args": {
       "fw_variant": "PFW",
       "step_type": "line_search"
@@ -23,7 +23,7 @@
   },
   {
     "name": "DIPFW",
-    "class_name": "FrankWolfe",
+    "class_name": "FrankWolfeSimplex",
     "args": {
       "fw_variant": "DIPFW",
       "step_type": "line_search"
@@ -31,7 +31,7 @@
   },
   {
     "name": "FW",
-    "class_name": "FrankWolfe",
+    "class_name": "FrankWolfeSimplex",
     "args": {
       "fw_variant": "FW",
       "step_type": "line_search"
@@ -39,7 +39,7 @@
   },
   {
     "name": "PFLaCG-PFW",
-    "class_name": "ParameterFreeLaCG",
+    "class_name": "ParameterFreeLaCGSimplex",
     "args": {
       "fw_variant": "PFW",
       "iter_sync": false
@@ -47,7 +47,7 @@
   },
   {
     "name": "PFLaCG-AFW",
-    "class_name": "ParameterFreeLaCG",
+    "class_name": "ParameterFreeLaCGSimplex",
     "args": {
       "fw_variant": "AFW",
       "iter_sync": false

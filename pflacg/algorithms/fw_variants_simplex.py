@@ -287,7 +287,7 @@ def dipfw_simplex(objective_function, feasible_region, x, step_size_param):
     return x + alpha * d, wolfe_gap, strong_wolfe_gap
 
 
-class ConditionalGradientSliding:
+class ConditionalGradientSlidingSimplex:
     def __init__(self):
         self.iteration = 0
     def run(self, objective_function, feasible_region, exit_criterion, x_initial=None, save_and_output_results=True, global_iter=None):

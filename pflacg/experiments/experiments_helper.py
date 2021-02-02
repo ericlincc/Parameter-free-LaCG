@@ -116,8 +116,8 @@ def plot_pretty(
     put_legend_outside=False,  # TODO: If true, may have unexpected behaviours.
     log_x=False,
     log_y=True,
-    x_limits=None,  # TODO: If not None, may have unexpected behaviours.
-    y_limits=None,  # TODO: If not None, may have unexpected behaviours.
+    list_x_limits=None,
+    y_limits=None,
     dpi=None,
     figsize=(16, 9),
     title_font_size=19,
@@ -257,16 +257,15 @@ def plot_pretty(
                 )
             else:
                 pass
+        if list_x_limits[j] is not None:
+            plt.xlim(list_x_limits[j])
+        if y_limits is not None:
+            plt.ylim(y_limits)
 
         plt.tight_layout()
         plt.grid(True, which="both")
 
         is_leftmost = False
-
-    if x_limits is not None:
-        plt.xlim(x_limits)
-    if y_limits is not None:
-        plt.ylim(y_limits)
 
     if title:
         plt.suptitle(title, fontsize=title_font_size)

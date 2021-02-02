@@ -32,7 +32,7 @@ BASE_RESULTS_DIR="/scratch/share/pflacg_experiments/final_run_results"
 # Run configs (Can be edited)
 ALGO_CONFIG="/home/bzfcarde/Computations/Parameter-free-LaCG/examples/algorithms/run_all_algorithms_iter_sync_false.json"
 EXIT_CRIT_TYPE="SWG"
-EXIT_CRIT_VALUE="0.00001"
+EXIT_CRIT_VALUE="0.00000001"
 MAX_TIME="$((10 * 60))"
 
 

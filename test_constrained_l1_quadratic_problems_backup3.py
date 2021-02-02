@@ -22,6 +22,10 @@ PATH_TO_PICKLE_BASE = "/scratch/share/pflacg_experiments/pickled_objects"
 dim = 1000
 l1_regularization = 1.0
 
+
+seed = 3
+np.random.seed(1)
+
 constraints = 250
 equality_matrix = np.zeros((constraints, dim))
 equality_vector = np.zeros((constraints))
@@ -42,16 +46,118 @@ feasible_region = ConstrainedL1BallPolytope(
     sparse_solver=False,
 )
 
+#import pickle
+#from os import path
+#with open(
+#    path.join(
+#        PATH_TO_PICKLE_BASE,
+#        "feasible_regions",
+#        f"{type(feasible_region).__name__}"
+#        f"-L1_ball_-dim_{dim}-seed{seed}.pickle",
+#    ),
+#    "wb"
+#) as f:
+#    pickle.dump(feasible_region, f)
+#    print("Pickle object dumped.")
+
 mat = np.random.rand(dim, dim)
 mat = mat.dot(mat.T) + np.identity(dim)
 
 optimum = 100.0*np.random.rand(dim)
 fun = Quadratic(dim, mat, optimum)
+condition_num = int(fun.largest_eigenvalue/fun.smallest_eigenvalue)
+
+#import pickle
+#from os import path
+#with open(
+#    path.join(
+#        PATH_TO_PICKLE_BASE,
+#        "objective_functions",
+#        f"{type(fun).__name__}"
+#        f"-L1_ball_Quadratic-dim_{dim}-cond_{condition_num}-seed{seed}.pickle",
+#    ),
+#    "wb"
+#) as f:
+#    pickle.dump(fun, f)
+#    print("Pickle object dumped.")
 
 accuracy = 0.0001
 exit_criterion = ExitCriterion("SWG", accuracy, max_time=1000)
+
+
+LazyAFW_algorithm = FrankWolfe("lazy", "line_search") 
+LazyAFW_results, output_point = LazyAFW_algorithm.run(fun, feasible_region, exit_criterion)
+
+
+colors = ["k", "c", "b", "m", "r", "g"]
+markers = ["o", "s", "^", "P", "D", "p"]
+size_marker = 12
+fontsize = 19
+fontsize_legend = 20
+linewidth_figures = 1.50
+
+import matplotlib.pyplot as plt
+
+plt.subplot(1, 2, 1)
+LazyAFW_run_iter_w = []
+for run_status in LazyAFW_results:
+    #print(run_status[4], run_status[4] is None)
+    if(run_status[4] is not None):
+        LazyAFW_run_iter_w.append((run_status[1], run_status[4]))
+
+#LazyAFW_run_iter_w = [(run_status[1], run_status[4]) if run_status[4] is not None for run_status in LazyAFW_results]
+#LazyAFW_run_iter_w = [(run_status[1], run_status[4]) for run_status in LazyAFW_results]
+
+plt.semilogy(
+    [s[0] for s in LazyAFW_run_iter_w],
+    [s[1] for s in LazyAFW_run_iter_w],
+    colors[3],
+    # marker=markers[1],
+    # markersize=size_marker,
+    # markevery = np.linspace(0, len([s[0] for s in AFW_run_iter_w]) - 2, 10, dtype = int).tolist(),
+    linewidth=linewidth_figures,
+    label = "Lazy AFW"
+)
+plt.xlabel("Time")
+plt.ylabel("Strong Wolfe Gap")
+plt.legend()
+
+plt.subplot(1, 2, 2)
+
+LazyAFW_run_iter_w = []
+for run_status in LazyAFW_results:
+    #print(run_status[4], run_status[4] is None)
+    if(run_status[4] is not None):
+        LazyAFW_run_iter_w.append((run_status[0], run_status[4]))
+
+#LazyAFW_run_iter_w = [(run_status[0], run_status[4]) for run_status in LazyAFW_results]
+plt.semilogy(
+    [s[0] for s in LazyAFW_run_iter_w],
+    [s[1] for s in LazyAFW_run_iter_w],
+    colors[3],
+    # marker=markers[1],
+    # markersize=size_marker,
+    # markevery = np.linspace(0, len([s[0] for s in AFW_run_iter_w]) - 2, 10, dtype = int).tolist(),
+    linewidth=linewidth_figures,
+    label = "Lazy AFW"
+)
+plt.xlabel("Iteration")
+plt.ylabel("Strong Wolfe Gap")
+plt.legend()
+plt.savefig("L1_ball_comparison_Lazy3.pdf")
+# plt.show()
+plt.close()
+
+quit()
+
 AFW_algorithm = FrankWolfe("AFW", "line_search") 
 AFW_results, output_point = AFW_algorithm.run(fun, feasible_region, exit_criterion)
+
+PFW_algorithm = FrankWolfe("PFW", "line_search") 
+PFW_results, output_point = PFW_algorithm.run(fun, feasible_region, exit_criterion)
+
+LazyAFW_algorithm = FrankWolfe("lazy", "line_search") 
+LazyAFW_results, output_point = LazyAFW_algorithm.run(fun, feasible_region, exit_criterion)
 
 #AGD_alg = ParameterFreeAGD(iter_sync = True)
 #feasible_region_convex_hull = ConvexHull(list(output_point.support))
@@ -73,6 +179,9 @@ AFW_results, output_point = AFW_algorithm.run(fun, feasible_region, exit_criteri
 PFLaCG_algorithm = ParameterFreeLaCG("AFW", iter_sync=False) 
 PFLaCG_results = PFLaCG_algorithm.run(fun, feasible_region, exit_criterion)
 
+PFLaCG_PFW_algorithm = ParameterFreeLaCG("PFW", iter_sync=False) 
+PFLaCG_PFW_results = PFLaCG_PFW_algorithm.run(fun, feasible_region, exit_criterion)
+
 colors = ["k", "c", "b", "m", "r", "g"]
 markers = ["o", "s", "^", "P", "D", "p"]
 size_marker = 12
@@ -85,6 +194,9 @@ import matplotlib.pyplot as plt
 plt.subplot(1, 2, 1)
 PFLaCG_run_iter_w = [(run_status[1], run_status[4]) for run_status in PFLaCG_results]
 AFW_run_iter_w = [(run_status[1], run_status[4]) for run_status in AFW_results]
+PFW_run_iter_w = [(run_status[1], run_status[4]) for run_status in PFW_results]
+LazyAFW_run_iter_w = [(run_status[1], run_status[4]) for run_status in LazyAFW_results]
+PFLaCG_PFW_run_iter_w = [(run_status[1], run_status[4]) for run_status in PFLaCG_PFW_results]
 plt.semilogy(
     [s[0] for s in PFLaCG_run_iter_w],
     [s[1] for s in PFLaCG_run_iter_w],
@@ -104,6 +216,36 @@ plt.semilogy(
     # markevery = np.linspace(0, len([s[0] for s in AFW_run_iter_w]) - 2, 10, dtype = int).tolist(),
     linewidth=linewidth_figures,
     label = "AFW"
+)
+plt.semilogy(
+    [s[0] for s in PFW_run_iter_w],
+    [s[1] for s in PFW_run_iter_w],
+    colors[2],
+    # marker=markers[1],
+    # markersize=size_marker,
+    # markevery = np.linspace(0, len([s[0] for s in AFW_run_iter_w]) - 2, 10, dtype = int).tolist(),
+    linewidth=linewidth_figures,
+    label = "PFW"
+)
+plt.semilogy(
+    [s[0] for s in LazyAFW_run_iter_w],
+    [s[1] for s in LazyAFW_run_iter_w],
+    colors[3],
+    # marker=markers[1],
+    # markersize=size_marker,
+    # markevery = np.linspace(0, len([s[0] for s in AFW_run_iter_w]) - 2, 10, dtype = int).tolist(),
+    linewidth=linewidth_figures,
+    label = "Lazy AFW"
+)
+plt.semilogy(
+    [s[0] for s in PFLaCG_PFW_run_iter_w],
+    [s[1] for s in PFLaCG_PFW_run_iter_w],
+    colors[4],
+    # marker=markers[1],
+    # markersize=size_marker,
+    # markevery = np.linspace(0, len([s[0] for s in AFW_run_iter_w]) - 2, 10, dtype = int).tolist(),
+    linewidth=linewidth_figures,
+    label = "PFLaCG PFW"
 )
 plt.xlabel("Time")
 plt.ylabel("Strong Wolfe Gap")
@@ -112,6 +254,9 @@ plt.legend()
 plt.subplot(1, 2, 2)
 PFLaCG_run_iter_w = [(run_status[0], run_status[4]) for run_status in PFLaCG_results]
 AFW_run_iter_w = [(run_status[0], run_status[4]) for run_status in AFW_results]
+PFW_run_iter_w = [(run_status[0], run_status[4]) for run_status in PFW_results]
+LazyAFW_run_iter_w = [(run_status[0], run_status[4]) for run_status in LazyAFW_results]
+PFLaCG_PFW_run_iter_w = [(run_status[0], run_status[4]) for run_status in PFLaCG_PFW_results]
 plt.semilogy(
     [s[0] for s in PFLaCG_run_iter_w],
     [s[1] for s in PFLaCG_run_iter_w],
@@ -132,9 +277,39 @@ plt.semilogy(
     linewidth=linewidth_figures,
     label = "AFW"
 )
+plt.semilogy(
+    [s[0] for s in PFW_run_iter_w],
+    [s[1] for s in PFW_run_iter_w],
+    colors[2],
+    # marker=markers[1],
+    # markersize=size_marker,
+    # markevery = np.linspace(0, len([s[0] for s in AFW_run_iter_w]) - 2, 10, dtype = int).tolist(),
+    linewidth=linewidth_figures,
+    label = "PFW"
+)
+plt.semilogy(
+    [s[0] for s in LazyAFW_run_iter_w],
+    [s[1] for s in LazyAFW_run_iter_w],
+    colors[3],
+    # marker=markers[1],
+    # markersize=size_marker,
+    # markevery = np.linspace(0, len([s[0] for s in AFW_run_iter_w]) - 2, 10, dtype = int).tolist(),
+    linewidth=linewidth_figures,
+    label = "Lazy AFW"
+)
+plt.semilogy(
+    [s[0] for s in PFLaCG_PFW_run_iter_w],
+    [s[1] for s in PFLaCG_PFW_run_iter_w],
+    colors[4],
+    # marker=markers[1],
+    # markersize=size_marker,
+    # markevery = np.linspace(0, len([s[0] for s in AFW_run_iter_w]) - 2, 10, dtype = int).tolist(),
+    linewidth=linewidth_figures,
+    label = "PFLaCG PFW"
+)
 plt.xlabel("Iteration")
 plt.ylabel("Strong Wolfe Gap")
 plt.legend()
-plt.savefig("L1_ball_comparison_2.pdf")
+plt.savefig("L1_ball_comparison_8.pdf")
 # plt.show()
 plt.close()

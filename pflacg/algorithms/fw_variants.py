@@ -52,7 +52,7 @@ class FrankWolfe(_AbstractAlgorithm):
         tau=2.0,
         eta=0.9,
         smoothness_estimate=1.0e-4,
-        sampling_frequency=20,
+        sampling_frequency=5,
     ):
         """
         Parameters

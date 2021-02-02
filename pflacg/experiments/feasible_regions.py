@@ -212,7 +212,7 @@ class ConstrainedBirkhoffPolytope(_AbstractFeasibleRegion):
             method=self.scipy_solver,
             bounds=(0.0, np.inf),
         )
-        if res.status == 0:
+        if not res.status == 0:
             raise Exception("LP oracle did not return succesfully.")
         optimum = np.array(res.x)
         return optimum.flatten()

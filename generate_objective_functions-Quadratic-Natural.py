@@ -12,7 +12,7 @@ PATH_TO_PICKLE_BASE = "/scratch/share/pflacg_experiments/pickled_objects"
 
 
 DIMENSIONS = [10000, 15000, 20000]
-CONDITION_NUMS = [1e3, 1e4, 1e5]
+CONDITION_NUMS = [1e6]
 RANDOM_SEEDS = [i for i in range(2)]
 
 

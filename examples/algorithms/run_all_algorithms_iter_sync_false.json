@@ -1,8 +1,18 @@
 [
   {
-    "name": "CGS",
-    "class_name": "ConditionalGradientSlidingSimplex",
+    "name": "PFLaCG-PFW",
+    "class_name": "ParameterFreeLaCGSimplex",
     "args": {
+      "fw_variant": "PFW",
+      "iter_sync": false
+    }
+  },
+  {
+    "name": "PFLaCG-AFW",
+    "class_name": "ParameterFreeLaCGSimplex",
+    "args": {
+      "fw_variant": "AFW",
+      "iter_sync": false
     }
   },
   {
@@ -35,22 +45,6 @@
     "args": {
       "fw_variant": "FW",
       "step_type": "line_search"
-    }
-  },
-  {
-    "name": "PFLaCG-PFW",
-    "class_name": "ParameterFreeLaCGSimplex",
-    "args": {
-      "fw_variant": "PFW",
-      "iter_sync": false
-    }
-  },
-  {
-    "name": "PFLaCG-AFW",
-    "class_name": "ParameterFreeLaCGSimplex",
-    "args": {
-      "fw_variant": "AFW",
-      "iter_sync": false
     }
   }
 ]

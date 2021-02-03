@@ -295,11 +295,10 @@ def plot_results(args):
                 with open(run_result["path_to_result"], "r") as f:
                     for line in f:
                         run_status = json.loads(line.strip())
-                        x.append(run_status[run_status_index[x_axis]])
-                        y.append(
-                            run_status[run_status_index[plot_config["y_axis"]]]
-                            - ref_opt
-                        )
+                        y_value = run_status[run_status_index[plot_config["y_axis"]]]
+                        if y_value:
+                            x.append(run_status[run_status_index[x_axis]])
+                            y.append(y_value - ref_opt)
                 xs.append(x)
                 ys.append(y)
             list_xs.append(xs)

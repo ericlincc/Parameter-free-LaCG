@@ -800,7 +800,7 @@ class FractionalAwayStepFW:
 
     def __init__(self, fw_variant="AFW", ratio=0.5, **kwargs):
         assert (
-            fw_variant == "AFW" or fw_variant == "PFW"
+            fw_variant in ("AFW", "PFW", "lazy")
         ), "Wrong variant supplied to the adaptive algorithm"
         self.ratio = 0.5
         self.fw_variant = fw_variant

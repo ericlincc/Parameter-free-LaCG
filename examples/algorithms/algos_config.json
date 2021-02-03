@@ -1,0 +1,50 @@
+[
+  {
+    "name": "AFW(L)",
+    "class_name": "FrankWolfe",
+    "args": {
+      "fw_variant": "lazy",
+      "step_type": "line_search"
+    }
+  },
+  {
+    "name": "PFLaCG-AFW(L)",
+    "class_name": "ParameterFreeLaCG",
+    "args": {
+      "fw_variant": "lazy",
+      "iter_sync": false
+    }
+  },
+  {
+    "name": "PFLaCG-PFW",
+    "class_name": "ParameterFreeLaCG",
+    "args": {
+      "fw_variant": "PFW",
+      "iter_sync": false
+    }
+  },
+  {
+    "name": "PFLaCG-AFW",
+    "class_name": "ParameterFreeLaCG",
+    "args": {
+      "fw_variant": "AFW",
+      "iter_sync": false
+    }
+  },
+  {
+    "name": "AFW",
+    "class_name": "FrankWolfe",
+    "args": {
+      "fw_variant": "AFW",
+      "step_type": "line_search"
+    }
+  },
+  {
+    "name": "PFW",
+    "class_name": "FrankWolfe",
+    "args": {
+      "fw_variant": "PFW",
+      "step_type": "line_search"
+    }
+  }
+]

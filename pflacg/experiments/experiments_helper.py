@@ -242,7 +242,8 @@ def plot_pretty(
 
         plt.xlabel(list_x_label[j], fontsize=label_font_size)
         if is_leftmost:
-            plt.ylabel(y_label, fontsize=label_font_size)
+            if y_label:
+                plt.ylabel(y_label, fontsize=label_font_size)
         else:
             plt.setp(ax.get_yticklabels(), visible=False)
 

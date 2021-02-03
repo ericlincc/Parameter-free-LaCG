@@ -265,7 +265,10 @@ def plot_results(args):
         with open(args.plot_config, "r") as f:
             plot_config = json.load(f)
 
-        y_label = y_label_dict[plot_config["y_axis"]]
+        if not ("hide_y_label" in plot_config and plot_config["hide_y_label"]):
+            y_label = y_label_dict[plot_config["y_axis"]]
+        else:
+            y_label = None
         if plot_config["y_axis"] == "primal_gap":
             ref_opt = plot_config["known_optimal_f_val"]
         elif plot_config["y_axis"] == "strong_wolfe_gap":

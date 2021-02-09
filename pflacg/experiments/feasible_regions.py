@@ -12,6 +12,23 @@ from scipy.sparse.linalg import eigsh
 
 from pflacg.experiments.experiments_helper import max_vertex
 
+from gurobipy import GRB, read, Column
+
+run_config_gurobi = {
+        'solution_only': True,
+        'verbosity': 'normal',
+        'OutputFlag': 0,
+        'dual_gap_acc': 1e-06,
+        'runningTimeLimit': None,
+        'use_LPSep_oracle': True,
+        'max_lsFW': 100000,
+        'strict_dropSteps': True,
+        'max_stepsSub': 100000,
+        'max_lsSub': 100000,
+        'LPsolver_timelimit': 100000,
+        'K': 1
+        }
+
 
 if __name__ == "__main__":
     logging.basicConfig(
@@ -110,6 +127,61 @@ class ConvexHull(_AbstractFeasibleRegion):
 
     def projection(self, x, accuracy):
         pass
+
+class gurobi_MIP(_AbstractFeasibleRegion):
+    """LP model implemented via Gurobi."""
+    def __init__(self, modelFilename):
+        model = read(modelFilename)
+        model.params.TimeLimit = run_config_gurobi['LPsolver_timelimit']
+        model.setParam('OutputFlag', False)
+        model.params.threads = 4
+        model.params.MIPFocus = 0
+        model.update()
+        self.dim = len(model.getVars())
+        self.model = model
+        return 
+
+    @property
+    def initial_point(self):
+        v = np.ones(self.dim)
+        return self.lp_oracle(v)
+
+    @property
+    def initial_active_set(self):
+        return [self.initial_point()]
+
+    def lp_oracle(self, cc):
+        m = self.model
+        for it, v in enumerate(m.getVars()):
+            v.setAttr(GRB.attr.Obj, cc[it])
+        #Update the model with the new atributes.
+        m.update()
+        m.optimize(lambda mod, where: self.fakeCallback(mod, where, GRB.INFINITY))
+        # Status checking
+        status = m.getAttr(GRB.Attr.Status)
+        if status == GRB.INF_OR_UNBD or \
+           status == GRB.INFEASIBLE  or \
+           status == GRB.UNBOUNDED:
+            assert False, "The model cannot be solved because it is infeasible or unbounded"
+        if status != GRB.OPTIMAL:
+            print(status)
+            assert False, "Optimization was stopped."
+        #Store the solution that will be outputted.
+        solution = np.array([v.x for v in m.getVars()], dtype=float)[:]
+        #Check that the initial number of constraints and the final number is the same.
+        return solution
+    
+    def away_oracle(self, grad, point_x):
+        return max_vertex(grad, point_x.support)
+
+    def fakeCallback(self, model, where, value):
+       ggEps = 1e-08
+       if where == GRB.Callback.MIPSOL:
+           obj = model.cbGet(GRB.Callback.MIPSOL_OBJ)
+       if where == GRB.Callback.MIP:
+           objBnd = model.cbGet(GRB.Callback.MIP_OBJBND)
+           if objBnd >= value + ggEps:
+               pass
 
 
 class BirkhoffPolytope(_AbstractFeasibleRegion):

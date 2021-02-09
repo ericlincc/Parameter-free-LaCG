@@ -63,10 +63,10 @@ class Point:
         if not isinstance(P, Point):
             raise TypeError("Cannot add non-Point object with a Point object")
         if not len(self.support) == len(P.support):
-            raise ValueError("Cannot add two Points with different support")
+            raise ValueError("Cannot add two Points with different supports")
         for vertex1, vertex2 in zip(self.support, P.support):
             if not id(vertex1) == id(vertex2):
-                raise ValueError("Cannot add two Points with different support")
+                raise ValueError("Cannot add two Points with different supports")
 
         return Point(
             self.cartesian_coordinates + P.cartesian_coordinates,

@@ -1,6 +1,6 @@
 {
   "list_x_axis": ["iteration", "time"],
-  "y_axis": "strong_wolfe_gap",
+  "y_axis": "primal_gap",
   "run_results": [
     {
       "name": "AFW",
@@ -19,16 +19,26 @@
   "title": null,
   "log_x": false,
   "log_y": true,
-  "list_legend_location" : [1, null],
+  "list_legend_location": [
+    1,
+    null
+  ],
   "put_legend_outside": false,
-  "x_limits": null,
-  "y_limits": null,
+  "list_x_limits": [
+    null,
+    null
+  ],
+  "y_limits": [0.0001, 10000],
   "dpi": 600,
-  "figsize": [20, 5],
+  "figsize": [
+    10,
+    5
+  ],
+  "hide_y_label" : true,
   "marker_size": 12,
   "title_font_size": 19,
-  "label_font_size": 19,
-  "axis_font_size": 12,
-  "legend_font_size": 12,
-  "linewidth_figures": 1.0
+  "label_font_size": 18,
+  "axis_font_size": 16,
+  "legend_font_size": 15,
+  "linewidth_figures": 3.0
 }

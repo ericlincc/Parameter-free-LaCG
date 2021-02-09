@@ -656,7 +656,7 @@ def generateStructuredGraph(layers, nodesPerLayer):
 
 
 """
-If typegraph = "Structured":
+If graph_type = "Structured":
     param1 = number of layers
     param2 = number of nodes per layer.
     
@@ -670,15 +670,15 @@ Growing network with redirection (GNR) digraph
 class FlowPolytope(_AbstractFeasibleRegion):
     """Shortest path problem on a DAG."""
 
-    def __init__(self, param1, param2, typeGraph="Structured"):
+    def __init__(self, param1, param2, graph_type="Structured"):
         # Generate the type of graph that we want
-        if typeGraph == "Structured":
+        if graph_type == "Structured":
             self.graph = generateStructuredGraph(param1, param2)
         else:
             self.graph = generateRandomGraph(param1, param2)
         # Sort the graph in topological order
-        self.topologicalSort = list(nx.topological_sort(self.graph))
-        self.dictIndices = self.constructDictionaryIndices(self.graph)
+        self.topological_sort = list(nx.topological_sort(self.graph))
+        self.dict_indices = self.constructDictionaryIndices(self.graph)
         self.dim = self.graph.number_of_edges()
         return
 
@@ -692,41 +692,41 @@ class FlowPolytope(_AbstractFeasibleRegion):
 
     def lp_oracle(self, weight):
         d = math.inf * np.ones(nx.number_of_nodes(self.graph))
-        d[self.topologicalSort[0]] = 0.0
+        d[self.topological_sort[0]] = 0.0
         p = -np.ones(nx.number_of_nodes(self.graph), dtype=int)
-        for u in self.topologicalSort:
+        for u in self.topological_sort:
             for v in self.graph.neighbors(u):
                 self.relax(u, v, d, weight, p)
 
-        pathAlg = [self.topologicalSort[-1]]
-        while pathAlg[-1] != self.topologicalSort[0]:
-            pathAlg.append(p[pathAlg[-1]])
-        pathAlg.reverse()
+        path_alg = [self.topological_sort[-1]]
+        while path_alg[-1] != self.topological_sort[0]:
+            path_alg.append(p[path_alg[-1]])
+        path_alg.reverse()
         # Reconstruc the vertex.
         outputVect = np.zeros(nx.number_of_edges(self.graph))
-        for i in range(len(pathAlg) - 1):
-            outputVect[self.dictIndices[(pathAlg[i], pathAlg[i + 1])]] = 1.0
+        for i in range(len(path_alg) - 1):
+            outputVect[self.dict_indices[(path_alg[i], path_alg[i + 1])]] = 1.0
         return outputVect
 
     def relax(self, i, j, dVect, wVect, pVect):
-        if dVect[j] > dVect[i] + wVect[self.dictIndices[(i, j)]]:
-            dVect[j] = dVect[i] + wVect[self.dictIndices[(i, j)]]
+        if dVect[j] > dVect[i] + wVect[self.dict_indices[(i, j)]]:
+            dVect[j] = dVect[i] + wVect[self.dict_indices[(i, j)]]
             pVect[j] = i
         return
 
     # Function that returns the values of the weights.
     def func(self, u, v, wVect):
-        return self.weight[self.dictIndices[(v, u)]]
+        return self.weight[self.dict_indices[(v, u)]]
 
     # Given a DAG, returns a mapping from the edges to indices from 0 to N
     # where N represents the number of Edges.
     def constructDictionaryIndices(self, graph):
         # Construct a dictionary of the indices
         dictionary = {}
-        itCount = 0
+        iter_count = 0
         for i in graph.edges:
-            dictionary[i] = itCount
-            itCount += 1
+            dictionary[i] = iter_count
+            iter_count += 1
         return dictionary
 
         def dim(self):
@@ -742,7 +742,7 @@ class FlowPolytope(_AbstractFeasibleRegion):
         return self.graph.edges()
 
     def topologicalOrdering(self):
-        return self.topologicalSort
+        return self.topological_sort
 
     def away_oracle(self, grad, point_x):
         return max_vertex(grad, point_x.support)

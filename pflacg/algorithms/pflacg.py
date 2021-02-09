@@ -10,12 +10,16 @@ import numpy as np
 
 from pflacg.experiments.objective_functions import RegularizedObjectiveFunction
 from pflacg.algorithms._abstract_algorithm import _AbstractAlgorithm
-from pflacg.algorithms._algorithms_utils import *  # TODO: Import only the methods and classes we need
+from pflacg.algorithms._algorithms_utils import (
+    DISPLAY_DECIMALS,
+    Point,
+    ExitCriterion,
+    compute_wolfe_gap,
+    compute_strong_wolfe_gap,
+    argmin_quadratic_over_active_set,
+)
 from pflacg.experiments.feasible_regions import ConvexHull
 from pflacg.algorithms.fw_variants import FrankWolfe
-from pflacg.algorithms.project_onto_active_set_jit import (
-    accelerated_projected_gradient_descent_over_simplex_jit,
-)
 
 
 if __name__ == "__main__":
@@ -27,6 +31,7 @@ if __name__ == "__main__":
 LOGGER = logging.getLogger()
 
 
+# Increase these two constants for large/difficult problem instances
 WAIT_TIME_FOR_LOCK = 0.2
 MAX_NUM_WAIT_INTERVALS = int(120 / WAIT_TIME_FOR_LOCK)
 
@@ -799,9 +804,8 @@ class FractionalAwayStepFW:
     """TODO: Add descriptions and reference."""
 
     def __init__(self, fw_variant="AFW", ratio=0.5, **kwargs):
-        assert (
-            fw_variant in ("AFW", "PFW", "lazy")
-        ), "Wrong variant supplied to the adaptive algorithm"
+        if not fw_variant in ("AFW", "PFW", "lazy"):
+            raise ValueError("Wrong variant supplied to the adaptive algorithm")
         self.ratio = 0.5
         self.fw_variant = fw_variant
 

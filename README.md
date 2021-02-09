@@ -42,10 +42,10 @@ Optional arguments:
 * ```--save_objects```: Save all experiments related objects (objective function, feasible region and algorithms).
 * ```--objective_function_use_pickled $PATH_TO_PICKLED_OBJECTIVE_FUNCTION```: Use an existing pickled objective function. Do not use this with ```--objective_function_config```.
 * ```--feasible_region_use_pickled $PATH_TO_PICKLED_FEASIBLE_REGION```: Use an existing pickled feasible region. Do not use this with ```--feasible_region_config```.
-* ```--random_seed```: Seed for random in NumPy.
+* ```--num_cpu_per_process $NUM_CPU```: Allowed number of CPUs per process. If 0, then no limit. Default is 1.
+* ```--random_seed $SEED```: Seed for random in NumPy.
 * ```--save_logging```: Save logs to a file in save_location.
 * ```--clear_pycache```: Clear python cache.
-* ```--single_cpu_mode```: Limiting each process to use at most one CPU core.
 
 Upon completion, the results from an experiment run will be save as text files within your specified `$SAVE_LOCATION`. You can then use `experiment_driver.py` to generate 
 

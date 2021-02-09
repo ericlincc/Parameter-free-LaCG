@@ -92,10 +92,10 @@ def run_algorithms(args):
     # Limit numpy to use one CPU core by setting MKL single-thread only. This must be
     # done before numpy is imported for the first time.
     # This setting is machine-specific and can be brittle.
-    if args.single_cpu_mode:
-        environ["MKL_NUM_THREADS"] = "1"
-        environ["NUMEXPR_NUM_THREADS"] = "1"
-        environ["OMP_NUM_THREADS"] = "1"
+    if args.num_cpu_per_process:
+        environ["MKL_NUM_THREADS"] = args.num_cpu_per_process
+        environ["NUMEXPR_NUM_THREADS"] = args.num_cpu_per_process
+        environ["OMP_NUM_THREADS"] = args.num_cpu_per_process
     import numpy as np
 
     # Set random seed if given
@@ -440,6 +440,12 @@ def run_algorithms_parser(argv_remaining):
         help="Seed for random",
     )
     parser.add_argument(
+        "--num_cpu_per_process",
+        type=int,
+        default=1,
+        help="Allowed number of CPUs per process. If 0, then no limit. Default is 1",
+    )
+    parser.add_argument(
         "--save_logging",
         action="store_true",
         help="Save execution logs to file.",
@@ -453,11 +459,6 @@ def run_algorithms_parser(argv_remaining):
         "--clear_pycache",
         action="store_true",
         help="Cleaning all python cache in __pycache__",
-    )
-    parser.add_argument(
-        "--single_cpu_mode",
-        action="store_true",
-        help="Limiting each process to use at most one CPU core.",
     )
     return parser.parse_known_args(argv_remaining)
 

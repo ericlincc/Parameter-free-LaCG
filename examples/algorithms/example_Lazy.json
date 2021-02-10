@@ -1,9 +1,0 @@
-[
-    {
-        "name" : "LazyFW",
-        "class_name" : "FrankWolfe",
-        "args" : { "fw_variant" : "lazy",
-				   "step_type" : "line_search"
-        }
-    }
-]

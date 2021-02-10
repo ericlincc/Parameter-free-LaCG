@@ -1,7 +1,7 @@
 [
     {
         "name" : "PFW",
-        "class_name" : "FrankWolfe",
+        "class_name" : "FrankWolfeSimplex",
         "args" : { "fw_variant" : "PFW",
 				   "step_type" : "line_search"
         }

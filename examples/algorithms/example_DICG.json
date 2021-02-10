@@ -1,7 +1,7 @@
 [
     {
         "name" : "DICG",
-        "class_name" : "FrankWolfe",
+        "class_name" : "FrankWolfeSimplex",
         "args" : { "fw_variant" : "DIPFW",
 				   "step_type" : "line_search"
         }

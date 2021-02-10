@@ -18,7 +18,7 @@ def accelerated_projected_gradient_descent_over_simplex_jit(
     tolerance,
 ):
     """
-    TODO: Add a description of the algorithm and its reference.
+    Solve the quadratic over simplex minimization problem using Nesterov's AGD.
 
     Parameters
     ----------

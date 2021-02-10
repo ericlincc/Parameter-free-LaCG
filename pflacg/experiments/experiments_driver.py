@@ -93,9 +93,9 @@ def run_algorithms(args):
     # done before numpy is imported for the first time.
     # This setting is machine-specific and can be brittle.
     if args.num_cpu_per_process:
-        environ["MKL_NUM_THREADS"] = args.num_cpu_per_process
-        environ["NUMEXPR_NUM_THREADS"] = args.num_cpu_per_process
-        environ["OMP_NUM_THREADS"] = args.num_cpu_per_process
+        environ["MKL_NUM_THREADS"] = str(args.num_cpu_per_process)
+        environ["NUMEXPR_NUM_THREADS"] = str(args.num_cpu_per_process)
+        environ["OMP_NUM_THREADS"] = str(args.num_cpu_per_process)
     import numpy as np
 
     # Set random seed if given

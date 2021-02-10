@@ -1,5 +1,5 @@
 # codeing=utf-8
-"""This module contains algorithm classes for the experiements."""
+"""This module contains the abastract algorithm for the experiements."""
 
 
 from abc import ABC, abstractmethod
@@ -19,6 +19,7 @@ class _AbstractAlgorithm(ABC):
         objective_function,
         feasible_region,
         exit_criterion,
+        point_initial=None,
         **kwargs,
     ):
         """
@@ -33,6 +34,8 @@ class _AbstractAlgorithm(ABC):
             Feasible region an algorithm will be optimizing over.
         exit_criterion: ExitCriterion
             Stopping condidion of an algorihtm run.
+        point_initial: Point
+            Optional initial point of this algorithm run.
 
         Returns
         -------

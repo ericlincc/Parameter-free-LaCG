@@ -38,7 +38,7 @@ def calculate_max_and_min_eigenvalues(M):
     from scipy.linalg import eigvalsh
 
     dim = len(M)
-    L = eigvalsh(M, eigvals=(dim - 1, dim - 1))[0]  # TODO: what does eigvals here do?
+    L = eigvalsh(M, eigvals=(dim - 1, dim - 1))[0]
     Mu = eigvalsh(M, eigvals=(0, 0))[0]
     return L, Mu
 

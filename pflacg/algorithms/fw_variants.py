@@ -39,11 +39,7 @@ class FrankWolfe(_AbstractAlgorithm):
     when the smoothness estimate is found to be too small.
     The eta parameter controls the (potential) shrinking of the estimate that happens
     when we start an iteration (in the hopes of locally adapting to the local smoothness.)
-
-
     """
-
-    # TODO: Add comment above referencing the papers for ALL algorithms.
 
     def __init__(
         self,
@@ -131,7 +127,8 @@ class FrankWolfe(_AbstractAlgorithm):
         if save_and_output_results:
             LOGGER.info(
                 "Running " + str(self.fw_variant) + "({5}): "
-                "iteration = {1:.{0}f}, duration = {2:.{0}f}, f_val = {3:.{0}f}, dual_gap = {4:.{0}f}, strong_wolfe_gap = {5:.{0}f}".format(
+                "iteration = {1:.{0}f}, duration = {2:.{0}f},"
+                "f_val = {3:.{0}f}, dual_gap = {4:.{0}f}, strong_wolfe_gap = {5:.{0}f}".format(
                     DISPLAY_DECIMALS, *run_status, self.fw_variant
                 )
             )
@@ -234,9 +231,14 @@ class FrankWolfe(_AbstractAlgorithm):
             return point_x_prev, dual_gap_prev, strong_wolfe_gap_prev
 
 
-# Note that the VANILLA FW algorithm only uses the cartesian coordinates
-# and does not use the active set or the barycentric coordinates for anything.
 def step_fw(objective_function, feasible_region, point_x, step_size_param):
+    """
+    Makes a Vanilla Frank-Wolfe step.
+
+    Note that the VANILLA FW algorithm only uses the cartesian coordinates and does not
+    use the active set or the barycentric coordinates for anything.
+    """
+
     grad = objective_function.evaluate_grad(point_x.cartesian_coordinates)
     v = feasible_region.lp_oracle(grad)
     wolfe_gap = grad.dot(point_x.cartesian_coordinates - v)
@@ -266,6 +268,8 @@ def step_fw(objective_function, feasible_region, point_x, step_size_param):
 
 
 def away_step_fw(objective_function, feasible_region, point_x, step_size_param):
+    """Makes a away-step Frank-Wolfe step."""
+
     grad = objective_function.evaluate_grad(point_x.cartesian_coordinates)
     v = feasible_region.lp_oracle(grad)
     point_a, index_max = feasible_region.away_oracle(grad, point_x)
@@ -299,7 +303,7 @@ def away_step_fw(objective_function, feasible_region, point_x, step_size_param):
                 Point(v, (1.0,), (v,)),
                 wolfe_gap,
                 strong_wolfe_gap,
-            )  # TODO: Can we use point_v here instead?
+            )
     else:
         alpha_max = point_x.barycentric_coordinates[index_max] / (
             1.0 - point_x.barycentric_coordinates[index_max]
@@ -319,6 +323,8 @@ def away_step_fw(objective_function, feasible_region, point_x, step_size_param):
 
 
 def pairwise_step_fw(objective_function, feasible_region, point_x, step_size_param):
+    """Makes a pairwise-step Frank-Wolfe step."""
+
     grad = objective_function.evaluate_grad(point_x.cartesian_coordinates)
     v = feasible_region.lp_oracle(grad)
     wolfe_gap = grad.dot(point_x.cartesian_coordinates - v)
@@ -357,6 +363,8 @@ def pairwise_step_fw(objective_function, feasible_region, point_x, step_size_par
 
 
 def dipfw(objective_function, feasible_region, point_x, step_size_param):
+    """Makes a decompositional invariant Frank-Wolfe step."""
+
     grad = objective_function.evaluate_grad(point_x.cartesian_coordinates)
     v = feasible_region.lp_oracle(grad)
     grad_aux = grad.copy()
@@ -388,8 +396,11 @@ def dipfw(objective_function, feasible_region, point_x, step_size_param):
 def fw_away_lazy(
     objective_function, feasible_region, point_x, step_size_param, phi_val, K=2.0
 ):
+    """Makes a lazy Frank-Wolfe step."""
+
     grad = objective_function.evaluate_grad(point_x.cartesian_coordinates)
-    point_a, index_max, point_v, index_min = point_x.max_min_vertex(grad)
+    point_a, index_max, point_v, index_min = point_x.max_min_vertices(grad)
+
     # Use old FW vertex.
     if (
         np.dot(grad, point_x.cartesian_coordinates - point_v.cartesian_coordinates)

@@ -1,5 +1,5 @@
 # coding=utf-8
-"""Utility functions and classes for the algorithm module."""
+"""Utility functions and helper classes for the algorithm module."""
 
 
 import logging
@@ -154,10 +154,9 @@ class Point:
         del support[index]
         return Point(self.cartesian_coordinates, tuple(barycentric), tuple(support))
 
-    def max_min_vertex(self, grad):
-        """
-        TODO: add description.
-        """
+    def max_min_vertices(self, grad):
+        """ Finds the step with the maximum and minimum inner product with the gradient."""
+
         max_prod = grad.dot(self.support[0])
         min_prod = grad.dot(self.support[0])
         max_ind = 0
@@ -275,6 +274,8 @@ class ExitCriterion:
 
 
 def compute_wolfe_gap(point_x, objective_function, feasible_region):
+    """Compute the Wolfe gap given a point."""
+
     grad = objective_function.evaluate_grad(point_x.cartesian_coordinates)
     v = feasible_region.lp_oracle(grad)
     wolfe_gap = grad.dot(point_x.cartesian_coordinates - v)
@@ -282,15 +283,13 @@ def compute_wolfe_gap(point_x, objective_function, feasible_region):
 
 
 def compute_strong_wolfe_gap(point_x, objective_function, feasible_region):
+    """Compute w(x, S) given a point with its proper support."""
+
     grad = objective_function.evaluate_grad(point_x.cartesian_coordinates)
     v = feasible_region.lp_oracle(grad)
     point_a, _ = feasible_region.away_oracle(grad, point_x)
     strong_wolfe_gap = np.dot(grad, point_a.cartesian_coordinates - v)
     return strong_wolfe_gap
-
-
-def line_search(self, grad, d, x):
-    return -np.dot(grad, d) / np.dot(d, self.M.dot(d))
 
 
 def step_size(function, x, d, grad, alpha_max, step_size_param):
@@ -313,7 +312,6 @@ def step_size(function, x, d, grad, alpha_max, step_size_param):
     return min(alpha, alpha_max)
 
 
-# TODO: Not used anywhere I believe. Remove it?
 def backtracking_step_size(function, d, x, grad, L, alpha_max, tau, eta):
     M = L * eta
     d_norm_squared = np.dot(d, d)
@@ -326,54 +324,6 @@ def backtracking_step_size(function, d, x, grad, L, alpha_max, tau, eta):
         M *= tau
         alpha = min(g_t / (M * d_norm_squared), alpha_max)
     return alpha, M
-
-
-# TODO: Not used anywhere I believe. Remove it?
-# Provides an initial estimate for the smoothness parameter.
-def smoothness_estimate(x0, function):
-    L = 1.0e-3
-    while function.f(x0 - function.grad(x0) / L) > function.f(x0):
-        L *= 1.5
-    return L
-
-
-# TODO: Not used anywhere I believe. Remove it?
-def new_vertex_fail_fast(vertex, active_set):
-    """ Find if x is in the active set."""
-    for i in range(len(active_set)):
-        # Compare succesive indices.
-        for j in range(len(active_set[i])):
-            if active_set[i][j] != vertex[j]:
-                break
-        if j == len(active_set[i]) - 1:
-            return False, i
-    return True, np.nan
-
-
-# TODO: Not used anywhere I believe. Remove it?
-def delete_vertex_index(index, active_set, lambdas):
-    """Deletes the extremepoint from the list active_set, and from lambdas. """
-    del active_set[index]
-    del lambdas[index]
-    return
-
-
-# TODO: this is also implemented in Point. Do we need both?
-def max_min_vertices(grad, active_set):
-    """ Finds the step with the maximum and minimum inner product with the gradient."""
-    max_prod = np.dot(active_set[0], grad)
-    min_prod = np.dot(active_set[0], grad)
-    max_ind = 0
-    min_ind = 0
-    for i in range(len(active_set)):
-        if np.dot(active_set[i], grad) > max_prod:
-            max_prod = np.dot(active_set[i], grad)
-            max_ind = i
-        else:
-            if np.dot(active_set[i], grad) < min_prod:
-                min_prod = np.dot(active_set[i], grad)
-                min_ind = i
-    return active_set[max_ind], max_ind, active_set[min_ind], min_ind
 
 
 def calculate_stepsize(x, d):
@@ -404,7 +354,12 @@ def argmin_quadratic_over_active_set(
     base_quadratic=None,
 ):
     """
-    TODO: Add a proper description of the subproblem which this function solves.
+    Solves the minimization problem for a quadratic over the convex hull formed by the
+    active set, using Nesterov's AGD with projections onto simplex. See Appendix D.2
+    for more details.
+
+    The quadratic it tries to solve must be of this form:
+    f (u) = <linear_vector,.u> + quadratic_coefficient * ||u||_2^2
 
     Parameters
     ----------

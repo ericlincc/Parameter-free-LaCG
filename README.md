@@ -4,7 +4,7 @@
 ## Setting up the conda environment to run experiments
 
 
-We use [Anaconda](https://www.anaconda.com/) for Python package management. When you have it installed, you can create a new conda environment using `Parameter-free-LaCG/environments.yml`:
+We use [Anaconda](https://www.anaconda.com/) for Python package management. When you have it installed, you can create a new conda environment using `environments.yaml`:
 ```
 $ conda env create --name pflacg --file=environments.yaml
 ```
@@ -21,6 +21,7 @@ The bulk of the code for running the experiments is located within `pflacg` whic
 
 
 ## Running the experiments
+
 
 ### Using the experiments driver
 
@@ -45,12 +46,12 @@ Optional arguments:
 * ```--num_cpu_per_process $NUM_CPU```: Allowed number of CPUs per process. If 0, then no limit. Default is 1.
 * ```--random_seed $SEED```: Seed for random in NumPy.
 * ```--save_logging```: Save logs to a file in save_location.
-* ```--clear_pycache```: Clear python cache.
+* ```--clear_pycache```: Clear python cache. Please include this option after any changes is made to the code.
 
 Upon completion, the results from an experiment run will be save as text files within your specified `$SAVE_LOCATION`. You can then use `experiment_driver.py` to generate 
 
 
-### Using a Jupyter notebook
+### Using Jupyter notebook
 
 
 Jupyter notebook comes installed with our `pflacg` conda environment. Start a Jupyter notebook server while in the root directory of this repository:
@@ -59,8 +60,11 @@ Jupyter notebook comes installed with our `pflacg` conda environment. Start a Ju
 jupyter notebook
 ```
 
+When inside a Jupyter notebook, you can import the `pflacg` module by simply running `import pflacg`. To set up your custom experiements, please first instantiate your desire feasible region and objective function objects, then instantiate algorithm objects such as `ParameterFreeLaCG`. To run your experiements, simply call the `run` method inside any algorihtm objects.
+
 
 ## Example run commands
+
 
 ```
 python -m pflacg.experiments.experiments_driver --task run_algorithms \
@@ -70,10 +74,10 @@ python -m pflacg.experiments.experiments_driver --task run_algorithms \
     --algorithms_config ./examples/algorithms/example_PFLaCG.json \
     --exit_criterion_type SWG \
     --exit_criterion_value 0.001 \
+    --num_cpu_per_process 1 \
     --max_time 100 \
     --clear_pycache \
-    --single_cpu_mode \
-    --save_logging \
+    --save_logging
 ```
 
 ```

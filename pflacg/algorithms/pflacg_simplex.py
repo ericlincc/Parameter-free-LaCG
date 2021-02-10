@@ -214,7 +214,7 @@ class ParameterFreeLaCGSimplex(_AbstractAlgorithm):
                         sigma,
                         shared_buffers_dict,
                         iteration,
-                        1.0e-6,
+                        target_accuracy,
                     ),
                 )
                 if len(np.where(x_ACC > 0.0)[0]) > 1:
@@ -358,7 +358,7 @@ class ParameterFreeAGDSimplex:
         initial_sigma=None,
         shared_buffers_dict=None,
         last_restart_iter=0,
-        epsilon_f=1e-6,
+        epsilon_f=1e-9,
     ):
         """Run PF-ACC given an initial point and an active set/feasible region.
 
@@ -510,7 +510,7 @@ class ParameterFreeAGDSimplex:
         sigma,
         global_eta=None,
         global_sigma=None,
-        epsilon_f=1e-8,
+        epsilon_f=1e-9,
     ):
         """Executes one call of ACC from Algorithm 4 in the paper.
 
@@ -632,7 +632,7 @@ class ParameterFreeAGDSimplex:
         epsilon_0,
         eta_0,
         global_eta=None,
-        epsilon_f=1e-8,
+        epsilon_f=1e-9,
     ):
         """Executing one AGD-Iter as described in Algo 1 of the paper."""
         iteration = 0

@@ -348,7 +348,7 @@ def argmin_quadratic_over_active_set(
     quadratic_coefficient,
     linear_vector,
     active_set,
-    reference_point,
+    point_reference,
     tolerance_type,
     tolerance,
     base_quadratic=None,
@@ -369,7 +369,7 @@ def argmin_quadratic_over_active_set(
         The linear vector of the quadratic subproblem.
     active_set: tuple(np.ndarray)
         The tuple of active vertices.
-    reference_point: np.ndarray
+    point_reference: np.ndarray
         Reference point for computing the gradient mapping if
         tolerance_type="gradient mapping".
     tolerance_type: string
@@ -400,8 +400,8 @@ def argmin_quadratic_over_active_set(
         linear=linear,
         constant=constant,
         active_set=matrix,
-        initial_x=np.array(reference_point.barycentric_coordinates),
-        reference_x=np.array(reference_point.cartesian_coordinates),
+        initial_x=np.array(point_reference.barycentric_coordinates),
+        reference_x=np.array(point_reference.cartesian_coordinates),
         tolerance_type=tolerance_type,
         tolerance=tolerance,
     )

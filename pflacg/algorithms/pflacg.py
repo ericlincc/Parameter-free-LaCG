@@ -3,6 +3,7 @@
 
 
 import logging
+from os import system
 import time
 from multiprocessing import shared_memory, Value, Process, Lock
 
@@ -36,6 +37,38 @@ WAIT_TIME_FOR_LOCK = 0.2
 MAX_NUM_WAIT_INTERVALS = int(120 / WAIT_TIME_FOR_LOCK)
 
 
+# Helper functions
+
+
+def dummy_call_argmin_quadratic_over_active_set():
+    LOGGER.info("Compiling argmin_quadratic_over_active_set with numba jit.")
+    try:
+        active_set = (
+            np.array([1.0, 0.0, 0.0]),
+            np.array([0.0, 1.0, 0.0]),
+        )
+        point_reference = Point(
+            np.array([0.5, 0.5, 0.0]),
+            np.array([0.5, 0.5]),
+            active_set,
+        )
+
+        _ = argmin_quadratic_over_active_set(
+            1.0,
+            np.array([1.0, 1.0, 1.0]),
+            active_set,
+            point_reference,
+            "dual gap",
+            10e-3,
+        )
+    except:
+        LOGGER.info("Compiling argmin_quadratic_over_active_set with numba jit failed.")
+        return False
+
+    LOGGER.info("Compiling argmin_quadratic_over_active_set with numba jit done.")
+    return True
+
+
 # Algorithms
 
 
@@ -62,12 +95,15 @@ class ParameterFreeLaCG(_AbstractAlgorithm):
         fw_variant="AFW",
         ratio=0.5,
         iter_sync=False,
+        recompile_jit=True,
     ):
         self.fw_variant = fw_variant
         self.ratio = 0.5
         self.iter_sync = iter_sync
         self.FAFW = FractionalAwayStepFW(fw_variant=self.fw_variant, ratio=self.ratio)
         self.ACC = ParameterFreeAGD(iter_sync=self.iter_sync)
+        if recompile_jit and not dummy_call_argmin_quadratic_over_active_set():
+            raise Exception("Numba jit compilation failed.")
 
     def run(
         self,
@@ -458,7 +494,6 @@ class ParameterFreeAGD:
                 buffer_lock.release()
             return point_x, eta, sigma, iteration
 
-        LOGGER.info("1st time argmin_quadratic_over_active_set")
         point_x_plus = argmin_quadratic_over_active_set(
             quadratic_coefficient=eta / 2.0,
             linear_vector=(
@@ -466,12 +501,11 @@ class ParameterFreeAGD:
                 - eta * point_x.cartesian_coordinates
             ),
             active_set=feasible_region.vertices,
-            reference_point=point_x,
+            point_reference=point_x,
             tolerance_type="gradient mapping",
             tolerance=eta / 32,
             base_quadratic=base_quadratic,
         )
-        LOGGER.info("1st time argmin_quadratic_over_active_set ended")
         grad_mapping = (
             point_x.cartesian_coordinates - point_x_plus.cartesian_coordinates
         )
@@ -591,7 +625,7 @@ class ParameterFreeAGD:
                     grad_x - (eta_0 + sigma) * point_x.cartesian_coordinates
                 ),
                 active_set=feasible_region.vertices,
-                reference_point=point_x,
+                point_reference=point_x,
                 tolerance_type="gradient mapping",
                 tolerance=(eta_0 + sigma) / 32,
                 base_quadratic=base_quadratic,
@@ -812,7 +846,7 @@ class ParameterFreeAGD:
             quadratic_coefficient=(sigma * A + eta_0) / 2,
             linear_vector=(-z),
             active_set=feasible_region.vertices,
-            reference_point=point_x,
+            point_reference=point_x,
             tolerance_type="dual gap",
             tolerance=epsilon_M,
             base_quadratic=base_quadratic,
@@ -825,7 +859,7 @@ class ParameterFreeAGD:
                 - (eta + sigma) * point_yh.cartesian_coordinates
             ),
             active_set=feasible_region.vertices,
-            reference_point=point_yh,
+            point_reference=point_yh,
             tolerance_type="dual gap",
             tolerance=1e-10,
             base_quadratic=base_quadratic,

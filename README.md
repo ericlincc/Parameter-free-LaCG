@@ -1,19 +1,34 @@
 # Code for Parameter-free Locally Accelerated Conditional Gradient and its experiments.
 
 
-## Setting up environment to run experiments
+This branch is optimized specifically for Probability Simplex feasible regions.
 
-Creating a new conda environment using `Parameter-free-LaCG/environments.yml`:
+
+## Setting up the conda environment to run experiments
+
+
+We use [Anaconda](https://www.anaconda.com/) for Python package management. When you have it installed, you can create a new conda environment using `environment.yaml`:
 ```
-$ conda env create --name pflacg --file=environments.yaml
+$ conda env create --name pflacg --file=environment.yaml
 ```
 
-Activate the conda environment:
+Activate the `pflacg` conda environment for executing the code in the `pflacg` Python module:
 ```
 $ conda activate pflacg
 ```
 
-## Setting up environment to run experiments
+## A brief overview of our codebase
+
+
+The bulk of the code for running the experiments is located within `pflacg` which can be imported as a Python module from the root of this repository (or alternative if copied to the binary directory of your Python installation). All implemented algorithms are located under `pflacg/algorithms` and the implementation for **Parameter-free Locally Accelerated Conditional Gradient** is located inside `pflacg/algorithms/pflacg_simplex.py`. The code for construsting relevant objective functions and feasible regions is located under `pflacg/experiemnts`. The primary tool we use for running our experiments is `pflacg/experiments/experiment_driver.py` and instructions for using it are included in the next section.
+
+
+## Running the experiments
+
+
+### Using the experiments driver
+
+Here we provide detailed instructions on how to run experiments using `experiments_driver.py`. Please find example configurations for the algorithms, feasible regions and objectives functions under `examples`, or alternative you can construct the necessary objects using your custom Python script.
 
 ```
 python -m pflacg.experiments.experiments_driver --task run_algorithms \
@@ -31,12 +46,28 @@ Optional arguments:
 * ```--save_objects```: Save all experiments related objects (objective function, feasible region and algorithms).
 * ```--objective_function_use_pickled $PATH_TO_PICKLED_OBJECTIVE_FUNCTION```: Use an existing pickled objective function. Do not use this with ```--objective_function_config```.
 * ```--feasible_region_use_pickled $PATH_TO_PICKLED_FEASIBLE_REGION```: Use an existing pickled feasible region. Do not use this with ```--feasible_region_config```.
-* ```--random_seed```: Seed for random in NumPy.
+* ```--num_cpu_per_process $NUM_CPU```: Allowed number of CPUs per process. If 0, then no limit. Default is 1.
+* ```--random_seed $SEED```: Seed for random in NumPy.
 * ```--save_logging```: Save logs to a file in save_location.
-* ```--clear_pycache```: Clear python cache.
-* ```--single_cpu_mode```: Limiting each process to use at most one CPU core.
+* ```--clear_pycache```: Clear python cache. Please include this option after any changes is made to the code.
 
-### Examples
+Upon completion, the results from an experiment run will be save as text files within your specified `$SAVE_LOCATION`. You can then use `experiment_driver.py` to generate 
+
+
+### Using Jupyter notebook
+
+
+Jupyter notebook comes installed with our `pflacg` conda environment. Start a Jupyter notebook server while in the root directory of this repository:
+
+```
+jupyter notebook
+```
+
+When inside a Jupyter notebook, you can import the `pflacg` module by simply running `import pflacg`. To set up your custom experiements, please first instantiate your desire feasible region and objective function objects, then instantiate algorithm objects such as `ParameterFreeLaCG`. To run your experiements, simply call the `run` method inside any algorihtm objects.
+
+
+## Example run commands
+
 
 ```
 python -m pflacg.experiments.experiments_driver --task run_algorithms \
@@ -46,8 +77,14 @@ python -m pflacg.experiments.experiments_driver --task run_algorithms \
     --algorithms_config ./examples/algorithms/example_PFLaCG.json \
     --exit_criterion_type SWG \
     --exit_criterion_value 0.001 \
+    --num_cpu_per_process 1 \
     --max_time 100 \
     --clear_pycache \
-    --single_cpu_mode \
-    --save_logging \
+    --save_logging
+```
+
+```
+python -m pflacg.experiments.experiments_driver --task plot_results \
+    --save_location "your/save/location" \
+    --plot_config "examples/plots/plot_config.json"
 ```

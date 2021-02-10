@@ -16,6 +16,7 @@ import matplotlib.pyplot as plt
 import pflacg.algorithms as algorithms
 import pflacg.experiments.feasible_regions as feasible_regions
 import pflacg.experiments.objective_functions as objective_functions
+import pflacg.experiments.experiments_helper as helper
 
 
 if __name__ == "__main__":
@@ -91,10 +92,10 @@ def run_algorithms(args):
     # Limit numpy to use one CPU core by setting MKL single-thread only. This must be
     # done before numpy is imported for the first time.
     # This setting is machine-specific and can be brittle.
-    if args.single_cpu_mode:
-        environ["MKL_NUM_THREADS"] = "1"
-        environ["NUMEXPR_NUM_THREADS"] = "1"
-        environ["OMP_NUM_THREADS"] = "1"
+    if args.num_cpu_per_process:
+        environ["MKL_NUM_THREADS"] = str(args.num_cpu_per_process)
+        environ["NUMEXPR_NUM_THREADS"] = str(args.num_cpu_per_process)
+        environ["OMP_NUM_THREADS"] = str(args.num_cpu_per_process)
     import numpy as np
 
     # Set random seed if given
@@ -176,6 +177,10 @@ def run_algorithms(args):
     # Parse config
     with open(args.algorithms_config, "r") as f:
         algorithms_config = json.load(f)
+    LOGGER.info("Algorithm configs in this run:")
+    for algo_config in algorithms_config:
+        LOGGER.info(f"- {json.dumps(algo_config)}")
+
     # Instantiate algorithms
     list_algorithms = []
     for algorithm_config in algorithms_config:
@@ -239,19 +244,6 @@ def run_algorithms(args):
 def plot_results(args):
     """Plot graphs from run histories."""
 
-    # loading results into memory
-    names_results = []
-    for path_to_result in args.path_to_results:
-        algorithm_name = path_to_result.split("/")[-1].split("_")[0]
-        name_result = (algorithm_name, [])
-        with open(path_to_result, "r") as f:
-            for line in f:
-                run_status = json.loads(line.strip())
-                name_result[1].append(run_status)
-        names_results.append(name_result)
-
-    # TODO: add safety checks
-
     run_status_index = {
         "iteration": 0,
         "time": 1,
@@ -259,36 +251,123 @@ def plot_results(args):
         "wolfe_gap": 3,
         "strong_wolfe_gap": 4,
     }
-    if args.y_axis == "primal_gap":
-        ref_opt = args.known_optimal_f_val
-        plt.ylabel(r"$f(x_k) - f(x^*)$")
-    else:
-        ref_opt = 0.0
-        plt.ylabel(r"$g(x_k)$")
-    if args.x_axis == "time":
-        plt.xlabel(r"t[s]")
-    else:
-        plt.xlabel(r"$k$")
+    x_label_dict = {
+        "time": r"t[s]",
+        "iteration": r"$k$",
+    }
+    y_label_dict = {
+        "primal_gap": r"$f(x_k) - f(x*)$",
+        "strong_wolfe_gap": r"$w(x_k, S_k)$",
+    }
 
-    for name_result in names_results:
-        name, result = name_result
-        gaps = [
-            run_status[run_status_index[args.y_axis]] - ref_opt for run_status in result
-        ]
-        x_axis = [run_status[run_status_index[args.x_axis]] for run_status in result]
-        plt.semilogy(x_axis, gaps, label=name)
+    if args.plot_config:
+        # If plot_config, use configs from plot_configs only.
+        with open(args.plot_config, "r") as f:
+            plot_config = json.load(f)
 
-    plt.grid()
-    plt.tight_layout()
-    plt.legend()
+        if not ("hide_y_label" in plot_config and plot_config["hide_y_label"]):
+            y_label = y_label_dict[plot_config["y_axis"]]
+        else:
+            y_label = None
+        if plot_config["y_axis"] == "primal_gap":
+            ref_opt = plot_config["known_optimal_f_val"]
+        elif plot_config["y_axis"] == "strong_wolfe_gap":
+            ref_opt = 0.0
+        else:
+            raise ValueError("invalid value for y_axis")
 
-    # Save timestamp for later identification
-    timestamp = get_current_timestamp()
-    plt.savefig(
-        path.join(
-            args.save_location, f"plot-{args.y_axis}-{args.x_axis}-{timestamp}.png"
+        list_xs = []
+        list_ys = []
+        legends = []
+        colors = []
+        markers = []
+        list_x_label = []
+        for x_axis in plot_config["list_x_axis"]:
+            list_x_label.append(x_label_dict[x_axis])
+
+            xs = []
+            ys = []
+            for run_result in plot_config["run_results"]:
+                if not list_xs:
+                    markers.append(run_result["marker"])
+                    colors.append(run_result["color"])
+                    legends.append(run_result["name"])
+
+                x = []
+                y = []
+                with open(run_result["path_to_result"], "r") as f:
+                    for line in f:
+                        run_status = json.loads(line.strip())
+                        y_value = run_status[run_status_index[plot_config["y_axis"]]]
+                        if y_value:
+                            x.append(run_status[run_status_index[x_axis]])
+                            y.append(y_value - ref_opt)
+                xs.append(x)
+                ys.append(y)
+            list_xs.append(xs)
+            list_ys.append(ys)
+
+        save_path = path.join(
+            args.save_location,
+            f"plot-{plot_config['y_axis']}-{'_'.join(plot_config['list_x_axis'])}-{get_current_timestamp()}.png",
         )
-    )
+        helper.plot_pretty(
+            list_xs=list_xs,
+            list_ys=list_ys,
+            legends=legends,
+            colors=colors,
+            markers=markers,
+            list_x_label=list_x_label,
+            y_label=y_label,
+            save_path=save_path,
+            **plot_config,
+        )
+
+    else:
+        # loading results into memory
+        names_results = []
+        for path_to_result in args.path_to_results:
+            algorithm_name = path_to_result.split("/")[-1].split("_")[0]
+            name_result = (algorithm_name, [])
+            with open(path_to_result, "r") as f:
+                for line in f:
+                    run_status = json.loads(line.strip())
+                    name_result[1].append(run_status)
+            names_results.append(name_result)
+
+        if args.y_axis == "primal_gap":
+            ref_opt = args.known_optimal_f_val
+            plt.ylabel(r"$f(x_k) - f(x^*)$")
+        else:
+            ref_opt = 0.0
+            plt.ylabel(r"$g(x_k)$")
+        if args.x_axis == "time":
+            plt.xlabel(r"t[s]")
+        else:
+            plt.xlabel(r"$k$")
+
+        for name_result in names_results:
+            name, result = name_result
+            gaps = [
+                run_status[run_status_index[args.y_axis]] - ref_opt
+                for run_status in result
+            ]
+            x_axis = [
+                run_status[run_status_index[args.x_axis]] for run_status in result
+            ]
+            plt.semilogy(x_axis, gaps, label=name)
+
+        plt.grid()
+        plt.tight_layout()
+        plt.legend()
+
+        # Save timestamp for later identification
+        plt.savefig(
+            path.join(
+                args.save_location,
+                f"plot-{args.y_axis}-{args.x_axis}-{get_current_timestamp()}.png",
+            )
+        )
 
 
 def run_algorithms_parser(argv_remaining):
@@ -361,6 +440,12 @@ def run_algorithms_parser(argv_remaining):
         help="Seed for random",
     )
     parser.add_argument(
+        "--num_cpu_per_process",
+        type=int,
+        default=1,
+        help="Allowed number of CPUs per process. If 0, then no limit. Default is 1",
+    )
+    parser.add_argument(
         "--save_logging",
         action="store_true",
         help="Save execution logs to file.",
@@ -374,11 +459,6 @@ def run_algorithms_parser(argv_remaining):
         "--clear_pycache",
         action="store_true",
         help="Cleaning all python cache in __pycache__",
-    )
-    parser.add_argument(
-        "--single_cpu_mode",
-        action="store_true",
-        help="Limiting each process to use at most one CPU core.",
     )
     return parser.parse_known_args(argv_remaining)
 
@@ -394,10 +474,19 @@ def plot_results_parser(argv_remaining):
         help="Save location of plotted results",
     )
     parser.add_argument(
+        "--plot_config",
+        type=str,
+        required=False,
+        help=(
+            "Config json file for plotting a nice graph (see example). "
+            "If provided, ignoring other arguments except save_location"
+        ),
+    )
+    parser.add_argument(
         "--path_to_results",
         type=str,
         nargs="+",
-        required=True,
+        required=False,
         help="Save locations of algorithm run results to be plotted",
     )
     parser.add_argument(
@@ -410,14 +499,14 @@ def plot_results_parser(argv_remaining):
     parser.add_argument(
         "--y_axis",
         type=str,
-        required=True,
+        required=False,
         choices=["primal_gap", "wolfe_gap", "strong_wolfe_gap"],
         help="Y-axis: primal gap or wolfe gap or strong_wolfe_gap",
     )
     parser.add_argument(
         "--x_axis",
         type=str,
-        required=True,
+        required=False,
         choices=["time", "iteration"],
         help="Quantity of x-axis to be plotted",
     )

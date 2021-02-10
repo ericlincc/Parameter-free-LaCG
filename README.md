@@ -4,9 +4,9 @@
 ## Setting up the conda environment to run experiments
 
 
-We use [Anaconda](https://www.anaconda.com/) for Python package management. When you have it installed, you can create a new conda environment using `environments.yaml`:
+We use [Anaconda](https://www.anaconda.com/) for Python package management. When you have it installed, you can create a new conda environment using `environment.yaml`:
 ```
-$ conda env create --name pflacg --file=environments.yaml
+$ conda env create --name pflacg --file=environment.yaml
 ```
 
 Activate the `pflacg` conda environment for executing the code in the `pflacg` Python module:

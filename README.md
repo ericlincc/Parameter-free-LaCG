@@ -51,23 +51,13 @@ Optional arguments:
 Upon completion, the results from an experiment run will be save as text files within your specified `$SAVE_LOCATION`. You can then use `experiment_driver.py` to generate 
 
 
-### Using Jupyter notebook
+#### Example run commands
 
 
-Jupyter notebook comes installed with our `pflacg` conda environment. Start a Jupyter notebook server while in the root directory of this repository:
-
-```
-jupyter notebook
-```
-
-When inside a Jupyter notebook, you can import the `pflacg` module by simply running `import pflacg`. To set up your custom experiements, please first instantiate your desire feasible region and objective function objects, then instantiate algorithm objects such as `ParameterFreeLaCG`. To run your experiements, simply call the `run` method inside any algorihtm objects.
-
-
-## Example run commands
-
+We provide two pseudo-commands for using the experiment driver. The first comand runs algorithms over the supplied objective function and feasible, while the second command plots the run results.
 
 ```
-python -m pflacg.experiments.experiments_driver --task run_algorithms \
+$ python -m pflacg.experiments.experiments_driver --task run_algorithms \
     --save_location test_runs \
     --objective_function_use_pickled ./Quadratic-dim_5000.pickle \
     --feasible_region_use_pickled ./ProbabilitySimplexPolytope-dim_5000.pickle \
@@ -81,7 +71,24 @@ python -m pflacg.experiments.experiments_driver --task run_algorithms \
 ```
 
 ```
-python -m pflacg.experiments.experiments_driver --task plot_results \
+$ python -m pflacg.experiments.experiments_driver --task plot_results \
     --save_location "your/save/location" \
     --plot_config "examples/plots/plot_config.json"
 ```
+
+
+### Using Jupyter notebook
+
+
+Jupyter notebook comes installed with our `pflacg` conda environment. Start a Jupyter notebook server while in the root directory of this repository:
+
+```
+jupyter notebook
+```
+
+When inside a Jupyter notebook, you can import the `pflacg` module by simply running `import pflacg`. To set up your custom experiements, please first instantiate your desire feasible region and objective function objects, then instantiate algorithm objects such as `ParameterFreeLaCG`. To run your experiements, simply call the `run` method inside any algorihtm objects.
+
+
+#### Example notebook
+
+We provide a toy example notebook for using our `pflacg` module and it is available under `examples/Example-Quadratic-ProbSimplex.ipynb`.

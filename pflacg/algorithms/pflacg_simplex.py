@@ -594,9 +594,9 @@ class ParameterFreeAGDSimplex:
                 wolfe_gap = compute_wolfe_gap_simplex_reduced(
                     yh, objective_function, active_set_point
                 )
-                if wolfe_gap <= epsilon_f:
-                    LOGGER.info("Early halt inside ACC with wolfe_gap <= epsilon_f")
-                    return yh, grad_mapping, wolfe_gap, eta, sigma, iteration
+                #if wolfe_gap <= epsilon_f:
+                #    LOGGER.info("Early halt inside ACC with wolfe_gap <= epsilon_f")
+                #    return yh, grad_mapping, wolfe_gap, eta, sigma, iteration
 
                 if (
                     np.linalg.norm(grad_mapping) ** 2 / (eta + sigma)

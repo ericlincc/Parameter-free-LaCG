@@ -1,7 +1,7 @@
 [
   {
     "name": "PFLaCG-AFW-Iter",
-    "class_name": "ParameterFreeLaCG",
+    "class_name": "ParameterFreeLaCGSimplex",
     "args": {
       "fw_variant": "AFW",
       "iter_sync": true

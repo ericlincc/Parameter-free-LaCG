@@ -9,7 +9,6 @@ import numpy as np
 
 from pflacg.algorithms._abstract_algorithm import _AbstractAlgorithm
 from pflacg.algorithms._algorithms_utils import (
-    Point,
     step_size,
     DISPLAY_DECIMALS,
     calculate_stepsize,
@@ -52,7 +51,6 @@ class FrankWolfeSimplex(_AbstractAlgorithm):
         tau=2.0,
         eta=0.9,
         smoothness_estimate=1.0e-4,
-        sampling_frequency=20,
     ):
         """
         Parameters
@@ -69,9 +67,11 @@ class FrankWolfeSimplex(_AbstractAlgorithm):
                 -"adaptive_short_step": Short step that minimizes smoothness.
         """
         self.fw_variant = fw_variant
-        self.sampling_frequency = sampling_frequency
         assert (
-            fw_variant == "AFW" or fw_variant == "PFW"
+            fw_variant == "AFW"
+            or fw_variant == "PFW"
+            or fw_variant == "FW"
+            or fw_variant == "DIPFW"
         ), "Wrong variant supplied to the adaptive algorithm"
         assert (
             step_type == "line_search" or step_type == "adaptive_short_step"
@@ -110,7 +110,7 @@ class FrankWolfeSimplex(_AbstractAlgorithm):
         if self.fw_variant == "FW":
             strong_wolfe_gap = 0.0
         else:
-            a, index_max = feasible_region.away_oracle_fast(grad, x)
+            a, index_max = feasible_region.away_oracle(grad, x)
             strong_wolfe_gap = grad.dot(a - v)
 
         dual_gap = grad.dot(x - v)
@@ -141,6 +141,20 @@ class FrankWolfeSimplex(_AbstractAlgorithm):
                     x,
                     self.step_size_param,
                 )
+            if self.fw_variant == "FW":
+                x, dual_gap_prev, strong_wolfe_gap_prev = step_fw_simplex(
+                    objective_function,
+                    feasible_region,
+                    x,
+                    self.step_size_param,
+                )
+            if self.fw_variant == "DIPFW":
+                x, dual_gap_prev, strong_wolfe_gap_prev = dipfw_simplex(
+                    objective_function,
+                    feasible_region,
+                    x,
+                    self.step_size_param,
+                )
             iteration += 1
             duration = time.time() - start_time
             f_val = objective_function.evaluate(x)
@@ -158,7 +172,6 @@ class FrankWolfeSimplex(_AbstractAlgorithm):
                 with global_iter.get_lock():
                     global_iter.value += 1
             if save_and_output_results:
-
                 if dual_gap_prev is None or strong_wolfe_gap_prev is None:
                     LOGGER.info(
                         "Running " + str(self.fw_variant) + ": "
@@ -182,10 +195,29 @@ class FrankWolfeSimplex(_AbstractAlgorithm):
             return x_prev, dual_gap_prev, strong_wolfe_gap_prev
 
 
+def step_fw_simplex(objective_function, feasible_region, x, step_size_param):
+    grad = objective_function.evaluate_grad(x)
+    v = feasible_region.lp_oracle(grad)
+    a, index_max = feasible_region.away_oracle(grad, x)
+    wolfe_gap = grad.dot(x - v)
+    strong_wolfe_gap = grad.dot(a - v)
+    d = v - x
+    alpha_max = 1.0
+    alpha = step_size(
+        objective_function,
+        x,
+        d,
+        grad,
+        alpha_max,
+        step_size_param,
+    )
+    return x + alpha * d, wolfe_gap, strong_wolfe_gap
+
+
 def away_step_fw_simplex(objective_function, feasible_region, x, step_size_param):
     grad = objective_function.evaluate_grad(x)
     v = feasible_region.lp_oracle(grad)
-    a, index_max = feasible_region.away_oracle_fast(grad, x)
+    a, index_max = feasible_region.away_oracle(grad, x)
     wolfe_gap = grad.dot(x - v)
     strong_wolfe_gap = grad.dot(a - v)
     if 2.0 * wolfe_gap > strong_wolfe_gap:
@@ -217,7 +249,7 @@ def pairwise_step_fw_simplex(objective_function, feasible_region, x, step_size_p
     grad = objective_function.evaluate_grad(x)
     v = feasible_region.lp_oracle(grad)
     wolfe_gap = grad.dot(x - v)
-    a, index_max = feasible_region.away_oracle_fast(grad, x)
+    a, index_max = feasible_region.away_oracle(grad, x)
     strong_wolfe_gap = grad.dot(a - v)
     # Find the weight of the extreme point a in the decomposition.
     alpha_max = x[index_max]
@@ -230,3 +262,30 @@ def pairwise_step_fw_simplex(objective_function, feasible_region, x, step_size_p
         step_size_param,
     )
     return x + alpha * (v - a), wolfe_gap, strong_wolfe_gap
+
+
+def dipfw_simplex(objective_function, feasible_region, x, step_size_param):
+    grad = objective_function.evaluate_grad(x)
+    v = feasible_region.lp_oracle(grad)
+    a, index_max = feasible_region.away_oracle(grad, x)
+    grad_aux = grad.copy()
+    wolfe_gap = grad.dot(x - v)
+    strong_wolfe_gap = grad.dot(a - v)
+    for i in range(len(grad_aux)):
+        if x[i] == 0.0:
+            grad_aux[i] = -1.0e15
+    a = feasible_region.lp_oracle(-grad_aux)
+    d = v - a
+    alpha_max = calculate_stepsize(x, d)
+    assert (
+        step_size_param["type_step"] == "line_search"
+    ), "DIPFW only accepts exact linesearch."
+    alpha = step_size(
+        objective_function,
+        x,
+        d,
+        grad,
+        alpha_max,
+        step_size_param,
+    )
+    return x + alpha * d, wolfe_gap, strong_wolfe_gap

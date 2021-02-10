@@ -6,6 +6,7 @@ import logging
 import math
 
 from cvxopt import matrix, sparse, solvers
+import networkx as nx
 import numpy as np
 from scipy.optimize import linprog
 from scipy.sparse.linalg import eigsh
@@ -20,6 +21,36 @@ if __name__ == "__main__":
         datefmt="%Y-%m-%d %H:%M:%S",
     )
 LOGGER = logging.getLogger()
+
+
+# Helper functions
+
+
+# Generate a valid DAG such that we can solve the shortest path problem.
+def generateRandomGraph(n, p):
+    DG = nx.gnr_graph(n, p)
+    return DG
+
+
+# Graph with a source and a sink, and a number of layers specified by layers
+# and a number of nodes per layer equal to nodes_per_layer.
+def generateStructuredGraph(layers, nodes_per_layer):
+    m = layers
+    s = nodes_per_layer
+    DG = nx.DiGraph()
+    DG.add_nodes_from(range(0, m * s + 1))
+    # Add first edges between source
+    DG.add_edges_from([(0, x + 1) for x in range(s)])
+    # Add all the edges in the subsequent layers.
+    for i in range(m - 1):
+        DG.add_edges_from(
+            [(x + 1 + s * i, y + 1 + s * (i + 1)) for x in range(s) for y in range(s)]
+        )
+    DG.add_edges_from([(x + 1 + s * (m - 1), m * s + 1) for x in range(s)])
+    return DG
+
+
+# Core classes
 
 
 class _AbstractFeasibleRegion(ABC):
@@ -625,34 +656,6 @@ class Spectrahedron(_AbstractFeasibleRegion):
 
     def away_oracle(self, grad, point_x):
         return max_vertex(grad, point_x.support)
-
-
-# TODO: Some of the following functions should go into experiment_helper.py
-
-import networkx as nx
-
-# Generate a valid DAG such that we can solve the shortest path problem.
-def generateRandomGraph(n, p):
-    DG = nx.gnr_graph(n, p)
-    return DG
-
-
-# Graph with a source and a sink, and a number of layers specified by layers
-# and a number of nodes per layer equal to nodesPerLayer.
-def generateStructuredGraph(layers, nodesPerLayer):
-    m = layers
-    s = nodesPerLayer
-    DG = nx.DiGraph()
-    DG.add_nodes_from(range(0, m * s + 1))
-    # Add first edges between source
-    DG.add_edges_from([(0, x + 1) for x in range(s)])
-    # Add all the edges in the subsequent layers.
-    for i in range(m - 1):
-        DG.add_edges_from(
-            [(x + 1 + s * i, y + 1 + s * (i + 1)) for x in range(s) for y in range(s)]
-        )
-    DG.add_edges_from([(x + 1 + s * (m - 1), m * s + 1) for x in range(s)])
-    return DG
 
 
 """

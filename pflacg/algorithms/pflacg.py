@@ -40,13 +40,28 @@ MAX_NUM_WAIT_INTERVALS = int(120 / WAIT_TIME_FOR_LOCK)
 
 
 class ParameterFreeLaCG(_AbstractAlgorithm):
-    """TODO: Add descriptions and reference."""
+    """
+    Implemention of Paramter-free Locally Accelerated Conditional Gradients (Algorithm 2).
+
+    Parameters
+    ----------
+    fw_variant: string
+        The CG variant for PFLaCG. Choice of "AFW", "PFW", "lazy".
+    ratio: float
+        How often to restart the CG variant.
+    iter_sync: boolean
+        With iter_sync=True, PFLaCG runs with synchronized iterations on CG and ACC
+        sides. In other words, the re-coupling only happens when both algorithms
+        have executed the same number of iterations. With iter_sync=False, PFLaCG
+        continues with the best-so-far point without waiting. In practice, iter_sync
+        should be set to False for best wall-clock time performance.
+    """
 
     def __init__(
         self,
         fw_variant="AFW",
         ratio=0.5,
-        iter_sync=True,
+        iter_sync=False,
     ):
         self.fw_variant = fw_variant
         self.ratio = 0.5
@@ -61,6 +76,24 @@ class ParameterFreeLaCG(_AbstractAlgorithm):
         exit_criterion,
         point_initial=None,
     ):
+        """
+        Minimizing objective function over feasible region using PF-LaCG.
+
+        Parameters
+        ----------
+        objective_function: implemented _AbstractObjectiveFunction
+            Objective function over which this algorithm optimizes.
+        feasible_region: implemented _AbstractFeasibleRegion
+            Feasible region over which this algorithm optimizes.
+        exit_criterion: ExitCriterion
+            Conditions required for it to halt the execution.
+        point_initial: Point
+            Initial point object.
+
+        Returns
+        -------
+        list(run_status)
+        """
 
         if point_initial is None:
             vertex = feasible_region.initial_point.copy()
@@ -81,7 +114,7 @@ class ParameterFreeLaCG(_AbstractAlgorithm):
             iteration,
             duration,
             f_val,
-            0.0,  # TODO: Fix or remove dummy dual gap
+            0.0,  # Dummy dual gap since we are concerned about SWG here
             strong_wolfe_gap_out,
         )
         run_history = [run_status]
@@ -269,7 +302,7 @@ class ParameterFreeLaCG(_AbstractAlgorithm):
                 iteration,
                 duration,
                 f_val,
-                0.0,  # TODO: Fix or remove dummy dual gap
+                0.0,  # Dummy dual gap since we are concerned about SWG here
                 strong_wolfe_gap_out,
             )
             LOGGER.info(
@@ -308,7 +341,29 @@ class ParameterFreeAGD:
         last_restart_iter=0,
         epsilon_f=1e-12,
     ):
-        """Run PF-ACC given an initial point and an active set/feasible region.
+        """
+        Run PF-ACC given an initial point and an active set/feasible region.
+
+        Parameters
+        ----------
+        objective_function: implemented _AbstractObjectiveFunction
+            Objective function over which this algorithm optimizes.
+        feasible_region: implemented _AbstractFeasibleRegion
+            Feasible region over which this algorithm optimizes.
+        point_initial: Point
+            Initial point object.
+        epsilon: float
+            Accuracy w.r.t. to norm of gradient mapping.
+        initial_eta: float
+            Initial estimate of the smoothness parameter eta.
+        initial_sigma: float
+            Initial estimate of the strong convexity parameter sigma.
+        shared_buffers_dict: dict
+            If provided, updates the shared memory buffers.
+        last_restart_iter: int
+            The iteration since the last restart in PFLaCG.
+        epsilon_f: float
+            Accuaracy w.r.t. to primal gap to early halt algorithm.
 
         Returns
         -------
@@ -801,7 +856,16 @@ class ParameterFreeAGD:
 
 
 class FractionalAwayStepFW:
-    """TODO: Add descriptions and reference."""
+    """
+    Implemention of Fractional Away-Step Frank-Wolfe (Algorithm 3).
+
+    Parameters
+    ----------
+    fw_variant: string
+        The CG variant for PFLaCG. Choice of "AFW", "PFW", "lazy".
+    ratio: float
+        How often to restart the CG variant.
+    """
 
     def __init__(self, fw_variant="AFW", ratio=0.5, **kwargs):
         if not fw_variant in ("AFW", "PFW", "lazy"):
@@ -818,6 +882,27 @@ class FractionalAwayStepFW:
         target_accuracy=None,
         global_iter=None,
     ):
+        """
+        Minimizing objective function over feasible region using FAFW.
+
+        Parameters
+        ----------
+        objective_function: implemented _AbstractObjectiveFunction
+            Objective function over which this algorithm optimizes.
+        feasible_region: implemented _AbstractFeasibleRegion
+            Feasible region over which this algorithm optimizes.
+        point_initial: Point
+            Initial point object.
+        target_accuracy: float
+            Accuracy w.r.t. SWG to which we solve this problem.
+        global_iter: multiprocessing.Value
+            Buffer for counting the number of global iterations.
+
+        Returns
+        -------
+        list(run_status)
+        """
+
         if target_accuracy is None:
             grad = objective_function.evaluate_grad(point_initial.cartesian_coordinates)
             v = feasible_region.lp_oracle(grad)

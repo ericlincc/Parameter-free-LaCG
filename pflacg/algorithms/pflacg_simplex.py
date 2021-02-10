@@ -343,7 +343,8 @@ class ParameterFreeLaCGSimplex(_AbstractAlgorithm):
 
 
 class ParameterFreeAGDSimplex:
-    def __init__(self, estimate_ratio=2):
+    def __init__(self, iter_sync=True, estimate_ratio=2):
+        self.iter_sync = iter_sync
         self.estimate_ratio = estimate_ratio
 
     def run(
@@ -476,7 +477,7 @@ class ParameterFreeAGDSimplex:
                 else:
                     _global_iter = np.infty
 
-                if _global_iter >= last_restart_iter + iteration:
+                if _global_iter >= last_restart_iter + iteration or not self.iter_sync:
                     # Update shared buffers
                     buffer_lock.acquire()
                     ret_x_cartesian_coordinates[:] = x[:]

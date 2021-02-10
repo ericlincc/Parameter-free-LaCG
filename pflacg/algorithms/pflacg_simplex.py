@@ -10,8 +10,13 @@ import numpy as np
 
 from pflacg.experiments.objective_functions import RegularizedObjectiveFunction
 from pflacg.algorithms._abstract_algorithm import _AbstractAlgorithm
-from pflacg.algorithms._algorithms_utils import *  # TODO: Import only the methods and classes we need
-from pflacg.experiments.feasible_regions import ConvexHull, ProbabilitySimplexPolytope
+from pflacg.algorithms._algorithms_utils import (
+    compute_wolfe_gap_simplex_reduced,
+    compute_strong_wolfe_gap_simplex_reduced,
+    DISPLAY_DECIMALS,
+    argmin_quadratic_over_active_set_simplex,
+    ExitCriterion,
+)
 from pflacg.algorithms.fw_variants_simplex import FrankWolfeSimplex
 
 
@@ -25,82 +30,6 @@ LOGGER = logging.getLogger()
 
 WAIT_TIME_FOR_LOCK = 0.2
 MAX_NUM_WAIT_INTERVALS = 3000
-
-
-def compute_strong_wolfe_gap_simplex(x, objective_function, feasible_region):
-    grad = objective_function.evaluate_grad(x)
-    v = feasible_region.lp_oracle(grad)
-    a, _ = feasible_region.away_oracle(grad, x)
-    strong_wolfe_gap = np.dot(grad, a - v)
-    wolfe_gap = grad.dot(x - v)
-    return strong_wolfe_gap, wolfe_gap
-
-
-def compute_wolfe_gap_simplex(x, objective_function, feasible_region):
-    grad = objective_function.evaluate_grad(x)
-    v = feasible_region.lp_oracle(grad)
-    wolfe_gap = grad.dot(x - v)
-    return wolfe_gap
-
-
-def AwayOracle_reduced(grad, active_set_point):
-    aux = np.multiply(grad, np.sign(active_set_point))
-    indices = np.where(active_set_point > 0.0)[0]
-    v = np.zeros(len(active_set_point), dtype=float)
-    indexMax = indices[np.argmax(aux[indices])]
-    v[indexMax] = 1.0
-    return v, indexMax
-
-
-def LPOracle_reduced(grad, active_set_point):
-    aux = np.multiply(grad, np.sign(active_set_point))
-    indices = np.where(active_set_point > 0.0)[0]
-    v = np.zeros(len(active_set_point), dtype=float)
-    indexMin = indices[np.argmin(aux[indices])]
-    v[indexMin] = 1.0
-    return v
-
-
-def compute_strong_wolfe_gap_simplex_reduced(x, objective_function, active_set_point):
-    grad = objective_function.evaluate_grad(x)
-    v = LPOracle_reduced(grad, active_set_point)
-    a, _ = AwayOracle_reduced(grad, x)
-    strong_wolfe_gap = np.dot(grad, a - v)
-    wolfe_gap = np.dot(grad, x - v)
-    return strong_wolfe_gap, wolfe_gap
-
-
-def compute_wolfe_gap_simplex_reduced(x, objective_function, active_set_point):
-    grad = objective_function.evaluate_grad(x)
-    v = LPOracle_reduced(grad, active_set_point)
-    wolfe_gap = np.dot(grad, x - v)
-    return wolfe_gap
-
-
-def argmin_quadratic_over_active_set_simplex(
-    quadratic_coefficient,
-    linear_vector,
-    active_set_point,
-):
-    LOGGER.info("Calling argmin")
-    indices = np.where(active_set_point > 0.0)[0]
-    aux = project_simplex(-linear_vector[indices] / (2.0 * quadratic_coefficient))
-    output_point = np.zeros(len(active_set_point))
-    output_point[indices] = aux
-    return output_point
-
-
-def project_simplex(x):
-    (n,) = x.shape
-    if x.sum() == 1.0 and np.alltrue(x >= 0):
-        return x
-    v = x - np.max(x)
-    u = np.sort(v)[::-1]
-    cssv = np.cumsum(u)
-    rho = np.count_nonzero(u * np.arange(1, n + 1) > (cssv - 1.0)) - 1
-    theta = float(cssv[rho] - 1.0) / (rho + 1)
-    w = (v - theta).clip(min=0)
-    return w
 
 
 class ParameterFreeLaCGSimplex(_AbstractAlgorithm):
@@ -123,9 +52,9 @@ class ParameterFreeLaCGSimplex(_AbstractAlgorithm):
         objective_function,
         feasible_region,
         exit_criterion,
-        point_initial = None,
+        point_initial=None,
     ):
-        
+
         if point_initial is None:
             point_initial = feasible_region.initial_point.copy()
         active_set_reference_point = np.ones(len(point_initial)) / len(point_initial)
@@ -156,7 +85,6 @@ class ParameterFreeLaCGSimplex(_AbstractAlgorithm):
 
         x_FAFW = point_initial
         x_ACC = point_initial
-        # active_set_ACC = point_initial.support
         strong_wolfe_gap_FAFW = strong_wolfe_gap_out
         strong_wolfe_gap_ACC = strong_wolfe_gap_out
         eta = None
@@ -266,7 +194,9 @@ class ParameterFreeLaCGSimplex(_AbstractAlgorithm):
                 strong_wolfe_gap_ACC,
                 wolfe_gap_ACC,
             ) = compute_strong_wolfe_gap_simplex_reduced(
-                x_ACC, objective_function, np.ones(len(point_initial)) / len(point_initial)
+                x_ACC,
+                objective_function,
+                np.ones(len(point_initial)) / len(point_initial),
             )
             LOGGER.info(f"FAFW SWG = {strong_wolfe_gap_FAFW}")
             LOGGER.info(f"ACC SWG = {strong_wolfe_gap_ACC}")
@@ -350,7 +280,6 @@ class ParameterFreeAGDSimplex:
     def run(
         self,
         objective_function,
-        # feasible_region,
         active_set_point,
         point_initial,
         epsilon=0.0,
@@ -426,14 +355,6 @@ class ParameterFreeAGDSimplex:
         strong_wolfe_gap, wolfe_gap = compute_strong_wolfe_gap_simplex_reduced(
             x, objective_function, active_set_point
         )
-        #if strong_wolfe_gap <= epsilon_f:
-        #    LOGGER.info("Early halting ACC with wolfe_gap <= epsilon_f")
-        #    if shared_buffers_dict:
-        #        buffer_lock.acquire()
-        #        global_eta.value = eta
-        #        global_sigma.value = sigma
-        #        buffer_lock.release()
-        #    return x, eta, sigma, iteration
 
         LOGGER.info("1st time argmin_quadratic_over_active_set")
         x_plus = argmin_quadratic_over_active_set_simplex(
@@ -503,7 +424,6 @@ class ParameterFreeAGDSimplex:
     def ACC_iter(
         self,
         objective_function,
-        # feasible_region,
         active_set_point,
         point_initial,
         eta,
@@ -576,7 +496,6 @@ class ParameterFreeAGDSimplex:
                 (eta, A, z, v, yh, y, grad_mapping, _iteration,) = self.AGD_iter(
                     objective_function,
                     reg_objective_function,
-                    # feasible_region,
                     active_set_point,
                     yh,
                     v,
@@ -594,10 +513,6 @@ class ParameterFreeAGDSimplex:
                 wolfe_gap = compute_wolfe_gap_simplex_reduced(
                     yh, objective_function, active_set_point
                 )
-                #if wolfe_gap <= epsilon_f:
-                #    LOGGER.info("Early halt inside ACC with wolfe_gap <= epsilon_f")
-                #    return yh, grad_mapping, wolfe_gap, eta, sigma, iteration
-
                 if (
                     np.linalg.norm(grad_mapping) ** 2 / (eta + sigma)
                     <= 9 * epsilon_0 / 4
@@ -621,7 +536,6 @@ class ParameterFreeAGDSimplex:
         self,
         objective_function,
         reg_objective_function,
-        # feasible_region,
         active_set_point,
         y_,
         v_,
@@ -650,7 +564,6 @@ class ParameterFreeAGDSimplex:
 
             x, z, v, yh, y = self.AGD_step(
                 reg_objective_function,
-                # feasible_region,
                 active_set_point,
                 y_,
                 v_,
@@ -692,7 +605,6 @@ class ParameterFreeAGDSimplex:
     def AGD_step(
         self,
         reg_objective_function,
-        # feasible_region,
         active_set_point,
         y_,
         v_,

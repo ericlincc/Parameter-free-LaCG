@@ -9,8 +9,6 @@ import numpy as np
 from scipy.sparse.linalg import eigsh
 from scipy.sparse import csc_matrix
 
-from pflacg.experiments.experiments_helper import max_vertex
-
 
 if __name__ == "__main__":
     logging.basicConfig(
@@ -82,27 +80,6 @@ class _AbstractFeasibleRegion(ABC):
         )
 
 
-class ConvexHull(_AbstractFeasibleRegion):
-    """Convex hull given a set of vertice."""
-
-    def __init__(self, vertices):
-        self.vertices = vertices
-
-    def lp_oracle(self, d):
-        val, index = d.dot(self.vertices[0]), 0
-        for _index, vertex in enumerate(self.vertices):
-            _val = d.dot(vertex)
-            if _val < val:
-                val, index = _val, _index
-        return self.vertices[index]
-
-    def away_oracle(self, d, point_x):
-        return max_vertex(d, point_x.support)
-
-    def projection(self, x, accuracy):
-        pass
-
-
 class ProbabilitySimplexPolytope(_AbstractFeasibleRegion):
     def __init__(self, dim):
         self.dim = dim
@@ -123,16 +100,13 @@ class ProbabilitySimplexPolytope(_AbstractFeasibleRegion):
         return v
 
     # Input is the vector over which we calculate the inner product.
-    def away_oracle_fast(self, grad, x):
+    def away_oracle(self, grad, x):
         aux = np.multiply(grad, np.sign(x))
         indices = np.where(x > 0.0)[0]
         v = np.zeros(len(x), dtype=float)
         indexMax = indices[np.argmax(aux[indices])]
         v[indexMax] = 1.0
         return v, indexMax
-
-    def away_oracle(self, grad, point_x):
-        return max_vertex(grad, point_x.support)
 
     def projection(self, x):
         (n,) = x.shape  # will raise ValueError if v is not 1-D

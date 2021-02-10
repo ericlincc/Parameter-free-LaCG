@@ -16,7 +16,6 @@ import matplotlib.pyplot as plt
 import pflacg.algorithms as algorithms
 import pflacg.experiments.feasible_regions as feasible_regions
 import pflacg.experiments.objective_functions as objective_functions
-import pflacg.experiments.experiments_helper as helper
 
 
 if __name__ == "__main__":

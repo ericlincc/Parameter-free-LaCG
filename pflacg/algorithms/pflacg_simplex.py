@@ -214,7 +214,7 @@ class ParameterFreeLaCGSimplex(_AbstractAlgorithm):
                         sigma,
                         shared_buffers_dict,
                         iteration,
-                        target_accuracy,
+                        1.0e-8,
                     ),
                 )
                 if len(np.where(x_ACC > 0.0)[0]) > 1:
@@ -426,14 +426,14 @@ class ParameterFreeAGDSimplex:
         strong_wolfe_gap, wolfe_gap = compute_strong_wolfe_gap_simplex_reduced(
             x, objective_function, active_set_point
         )
-        if strong_wolfe_gap <= epsilon_f:
-            LOGGER.info("Early halting ACC with wolfe_gap <= epsilon_f")
-            if shared_buffers_dict:
-                buffer_lock.acquire()
-                global_eta.value = eta
-                global_sigma.value = sigma
-                buffer_lock.release()
-            return x, eta, sigma, iteration
+        #if strong_wolfe_gap <= epsilon_f:
+        #    LOGGER.info("Early halting ACC with wolfe_gap <= epsilon_f")
+        #    if shared_buffers_dict:
+        #        buffer_lock.acquire()
+        #        global_eta.value = eta
+        #        global_sigma.value = sigma
+        #        buffer_lock.release()
+        #    return x, eta, sigma, iteration
 
         LOGGER.info("1st time argmin_quadratic_over_active_set")
         x_plus = argmin_quadratic_over_active_set_simplex(
